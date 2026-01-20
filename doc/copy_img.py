@@ -8,5 +8,5 @@ def copy_img(path1, path2):
                 # print(root, dirs,file)  
                 shutil.copy(os.path.join(root,file),os.path.join(path2,file))
 
-copy_img(r'C:\yuechen\code\wuyahe\1.code\2.data-rescale\screenshot\qianya',
-         r'C:\yuechen\code\wuyahe\1.code\2.data-rescale\screenshot\qianya-pca\img')
+copy_img(r'C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\houya',
+         r'C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\houya-pca\img')

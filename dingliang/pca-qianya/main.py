@@ -8,8 +8,8 @@ from utils import *
 
 # 主程序
 if __name__ == "__main__":
-    inp = r"C:\yuechen\code\wuyahe\1.code\2.data-rescale\screenshot\qianya-pca\img"
-    outp = r"C:\yuechen\code\wuyahe\1.code\2.data-rescale\screenshot\qianya-pca\pca"
+    inp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\qianya-pca\img"
+    outp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\pca-sum\img"
     os.makedirs(outp, exist_ok=True)
     os.makedirs(outp, exist_ok=True)
     total_files = 0
@@ -20,7 +20,12 @@ if __name__ == "__main__":
         inp_file = os.path.join(inp, file)
         
         name, ext_orig = os.path.splitext(file)
+
         outp_file = os.path.join(outp, f"{name}{ext_orig}")
+        # prex = file.split(".")[0]
+        # prex = prex.split("_")[0]
+        # os.makedirs(os.path.join(outp,prex), exist_ok=True)
+        # outp_file = os.path.join(outp,prex, f"{name}{ext_orig}")
         img = pil_imread(inp_file)  
         # pca 牙体长轴
         res= extract_tooth_long_axis(img, outp_file,file)
@@ -41,7 +46,8 @@ if __name__ == "__main__":
             points = np.array(list(zip(xs, ys)))
             red_len = p1_rot[1] - index
             print(file,red_len,p1_rot,p2_rot,center_rot,index)
-            with open(f"{outp}"+'\len.txt', 'a') as f:
+            # with open(f"{os.path.join(outp,prex)}"+'\len.txt', 'a') as f:
+            with open(f"{outp}" + '\len.txt', 'a') as f:
                 f.write(f"{file},{red_len}\n")
             cv2.line(vis1, tuple(p1_rot), tuple(p2_rot), (0, 0, 255), 3)
             cv2.circle(vis1, tuple(center_rot), 5, (255, 0, 0), -1)              
