@@ -8,17 +8,17 @@ from PIL import Image
 # plt.rcParams['font.sans-serif'] = ['SimHei']  
 # plt.rcParams['axes.unicode_minus'] = False 
 
-def cacul_y(p1_rot,p2_rot,img):
-    x,y = img.shape[1],img.shape[0]
-    y_list = []
-    for y_index in range(y):
-        if img[y_index].sum() > 0:
-            y_list.append(y_index)
-    min_y = min(y_list)
-    max_y = max(y_list)
-    p2_rot = (p2_rot[0],min_y)
-    p1_rot = (p1_rot[0],max_y)
-    return p1_rot,p2_rot
+# def cacul_y(p1_rot,p2_rot,img):
+#     x,y = img.shape[1],img.shape[0]
+#     y_list = []
+#     for y_index in range(y):
+#         if img[y_index].sum() > 0:
+#             y_list.append(y_index)
+#     min_y = min(y_list)
+#     max_y = max(y_list)
+#     p2_rot = (p2_rot[0],min_y)
+#     p1_rot = (p1_rot[0],max_y)
+#     return p1_rot,p2_rot
 
 def rotate_contour(cnt, M):
     pts = cnt.reshape(-1, 2).astype(np.float64)
@@ -65,15 +65,23 @@ def get_axiosx(rot_img,dist):
             break
     return i1
 
-# def get_axiosx(rot_img,dist):
-#     h,w = rot_img.shape
-#     i1 = 0
-#     for i in range(h):
-#         min_x,max_x = cacul_x(i,rot_img)
-#         if max_x - min_x >= dist:
-#             i1 = i
-#             break
-#     return i1
+def get_fir(rot_img):
+    h, w = rot_img.shape
+    for h_index in range(h):
+        if rot_img[h_index].sum() > 0:
+            return h_index
+
+def get_axiosx_top(rot_img,dist):
+    h,w = rot_img.shape
+    i1 = 0
+    for i in range(h):
+        min_x,max_x = cacul_x(i,rot_img)
+        if max_x - min_x >= dist:
+            i1 = i
+            break
+    return i1
+
+
 
 def rotate_point(pt, M):
     pt_h = np.array([pt[0], pt[1], 1.0])  

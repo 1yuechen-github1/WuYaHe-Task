@@ -2,6 +2,8 @@ import nibabel as nib
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+
+from matplotlib.colors import LinearSegmentedColormap
 from scipy.ndimage import affine_transform
 from scipy.ndimage import map_coordinates
 import open3d as o3d
@@ -413,68 +415,6 @@ def trans_to_nifti(plane_coeffs, pointcloud_point, nifti_img, affine):
     nifti_plane_coeffs = [nifti_normal[0], nifti_normal[1], nifti_normal[2], nifti_D]
     return nifti_plane_coeffs, nifti_center_point
 
-# def extract_slice(ct_data, label_data, plane_coeffs, center_point, index, lenth_sli,
-#                   length=300, height=400):
-#     """
-#     在NIfTI坐标系中从给定的平面提取正交截面
-#     """
-#     A, B, C, D = plane_coeffs
-#     normal = np.array([A, B, C])
-#     normal = normal / np.linalg.norm(normal)
-#     u_vec = np.array([0, 1, 0])
-#     print(index, u_vec, normal)
-#     u_vec = u_vec - np.dot(u_vec, normal) * normal
-#     u_vec = u_vec / np.linalg.norm(u_vec)
-#     v_vec = np.cross(normal, u_vec)
-#     u = np.linspace(-length / 2, length / 2, length)
-#     v = np.linspace(-height / 2, height / 2, height)
-#     uu, vv = np.meshgrid(u, v)
-#     xs = center_point[0] + uu * u_vec[0] + vv * v_vec[0]
-#     ys = center_point[1] + uu * u_vec[1] + vv * v_vec[1]
-#     zs = center_point[2] + uu * u_vec[2] + vv * v_vec[2]
-#     coords = np.stack([xs.ravel(), ys.ravel(), zs.ravel()], axis=0)
-#     slice_img = map_coordinates(ct_data, coords, order=0, mode='constant').reshape(height, length)
-#     mask_img = map_coordinates(label_data, coords, order=0, mode='constant').reshape(height, length)
-#     return slice_img, mask_img
-
-
-
-def extract_slice(point_cloud, plane_coeffs, center_point, tol=1.0):
-    """
-    从点云中提取平面截面点
-    point_cloud: (N,3) numpy array
-    plane_coeffs: [A,B,C,D] 平面方程 ax+by+cz+d=0
-    center_point: 截面中心，用于局部坐标系
-    tol: 距离平面的阈值
-    """
-    A, B, C, D = plane_coeffs
-    normal = np.array([A, B, C])
-    normal = normal / np.linalg.norm(normal)
-
-    # 计算点到平面的距离
-    distances = np.abs(np.dot(point_cloud, normal) + D) / np.linalg.norm(normal)
-
-    # 筛选平面附近点
-    mask = distances < tol
-    slice_points = point_cloud[mask]
-
-    if slice_points.shape[0] == 0:
-        return np.empty((0, 3)), np.empty((0, 2))
-
-    # 构建局部平面坐标系(u,v)
-    u_vec = np.array([0, 1, 0])
-    u_vec = u_vec - np.dot(u_vec, normal) * normal
-    u_vec = u_vec / np.linalg.norm(u_vec)
-    v_vec = np.cross(normal, u_vec)
-
-    # 转换为平面局部坐标
-    local_coords_u = np.dot(slice_points - center_point, u_vec)
-    local_coords_v = np.dot(slice_points - center_point, v_vec)
-    local_coords = np.stack([local_coords_u, local_coords_v], axis=-1)
-
-    return slice_points, local_coords
-
-
 def find_connected_components(points, k=15):
     """找到点云的连通分量"""
     tree = KDTree(points)
@@ -644,23 +584,6 @@ def find_plane_intersection_line(plane1, plane2, ct_data, affine, header):
     vol = draw_line_3d(p1, p2, vol)
     nii_vol = nib.Nifti1Image(vol, affine, header)
     return nii_vol
-
-
-# def save_slices_as_png(slices_data, slices_mask, slice_names, output_dir, patient_id):
-#     os.makedirs(output_dir, exist_ok=True)
-#     norm_data = ((slices_data - slices_data.min()) / (slices_data.max() - slices_data.min() + 1e-8) * 255).astype(np.uint8)
-#     rgb = np.stack([norm_data]*3, axis=-1)
-#     print('slices_data:',slices_data.shape, 'norm_data:',norm_data.shape)
-#     mask_condition = (slices_mask == 2) | (slices_mask == 3)
-#     rgb[mask_condition] = [0, 0, 255]  # 蓝色
-#     rgb[slices_mask == 0] = [0, 0, 0]
-#     # rgb[data == 3000] = [0, 255, 0]  # 绿色
-#     rgb[(slices_mask == 0) & (slices_data == 3000)] = [0, 0, 0]
-#     plt.figure(facecolor='black')
-#     plt.imshow(rgb)
-#     plt.axis('off')
-#     plt.savefig(f"{output_dir}/{patient_id}_{slice_names}.png", bbox_inches='tight', dpi=150)
-
 
 def save_slices_as_png(slices_data, slices_mask, slice_names, output_dir, patient_id):
     os.makedirs(output_dir, exist_ok=True)
@@ -1297,18 +1220,6 @@ def geodesic_with_radial_constraint(points, start_idx, k=15):
     return dijkstra(adj, indices=[start_idx], directed=False)[0]
 
 
-# def filt_point(left_kekong, right_kekong,sorted_points):
-#     radius = 5
-#     l_kekong = np.array(left_kekong)
-#     r_kekong = np.array(right_kekong)
-#     s_points = np.array(sorted_points)
-#     dist_l = np.linalg.norm(s_points - l_kekong, axis=1)
-#     dist_r = np.linalg.norm(s_points - r_kekong, axis=1)
-#     mask = (dist_l > radius) & (dist_r > radius)
-#     filtered_points = s_points[mask]
-#     print(sorted_points.shape, filtered_points.shape)
-#     return
-
 def find_min_dist_poin(point, yagong_point):
     point = np.asarray(point)
     yagong_point = np.asarray(yagong_point)
@@ -1317,3 +1228,9 @@ def find_min_dist_poin(point, yagong_point):
     min_distance = distances[min_index]
     min_point = yagong_point[min_index]
     return min_point
+
+def truncate_colormap(cmap, minval=0.0, maxval=1.0, n=256):
+    new_cmap = LinearSegmentedColormap.from_list(
+        'truncated_cmap', cmap(np.linspace(minval, maxval, n))
+    )
+    return new_cmap

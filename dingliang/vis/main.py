@@ -8,14 +8,14 @@ from mpl_toolkits.mplot3d import Axes3D
 from utils import *
 from skimage.transform import rescale
 from scipy.ndimage import zoom
-
+import numpy as  np
 # 设置中文字体和输出路径
 plt.rcParams['font.sans-serif'] = ['SimHei']
 plt.rcParams['axes.unicode_minus'] = False
 from matplotlib.colors import LinearSegmentedColormap
 
 
-def process_single_ct(ct_path, base_dir, output_base_dir):
+def process_single_ct(ct_path, base_dir, output_base_dir,txt_path):
     """
     处理单个CT文件的完整流程
     """
@@ -108,8 +108,6 @@ def process_single_ct(ct_path, base_dir, output_base_dir):
             best_result = (fitted_curve, tangents, tck, smoothing)
     if best_result:
         fitted_curve, tangents, tck, best_smoothing = best_result
-        # 4. 保存拟合结果（可选）/ 下缘线
-        # np.savetxt(os.path.join(output_dir, f"{filename}_step4_filt.txt"), fitted_curve, fmt='%.6f')
 
     xiayuanxiang_path_data = fitted_curve
     original_z = xiayuanxiang_path_data[:, 2].copy()
@@ -166,47 +164,86 @@ def process_single_ct(ct_path, base_dir, output_base_dir):
     qianya_list.append(qianya_points)
     houya_list.append(houya_points)
 
-    color = np.array([121, 164, 121])  # RGB
-    N = xhg_points.shape[0]
-    colors = np.tile(color, (N, 1))  # (n,3)
-    xhg_points = np.hstack((xhg_points, colors))  # (n,6)
-    # filename = filename + '.txt'
-    # np.savetxt(os.path.join(r'C:\yuechen\code\wuyahe\1.code\2.data-缩放\vis', filename),
-    #            xhg_points, fmt='%d %d %d %d %d %d')
+    qianya_data = []
+    houya_data = []
+    qianya_path = os.path.join(txt_path,'qianya',filename,'len.txt')
+    houya_path = os.path.join(txt_path, 'houya', filename, 'len.txt')
+    with open(qianya_path, 'r')as f:
+        for line in f:
+            line = line.strip()
+            value = int(line.split(',')[-1]) * 0.3
+            qianya_data.append(value)
+    with open(houya_path, 'r')as f:
+        for line in f:
+            line = line.strip()
+            value = int(line.split(',')[-1]) * 0.3
+            houya_data.append(value)
+    print('qianya_data:',qianya_data)
+    print('houya_data:',houya_data)
+    colormap = 'winter'
+    cmap = plt.get_cmap(colormap)
+    cmap = truncate_colormap(cmap, 0, 1)
 
-    clo_listmax = [255, 0, 0]
-    clo_listmin = [0, 0, 0]
-    clo_list =[]
-    data = []
-    # with open(r'C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\len.txt') as f:
-    #     for line in f:
-    #         file_name, number = line.strip().split(',')
-    #         number = int(number)  # 转成整数
-    #         data.append((file_name, number))
-    # data_dict = dict(data)
+    qianya_arr = np.array(qianya_data)
+    houya_arr = np.array(houya_data)
+    q_norm = (qianya_arr - qianya_arr.min()) / (qianya_arr.max() - qianya_arr.min() + 1e-8)
+    h_norm = (houya_arr - houya_arr.min()) / (houya_arr.max() - houya_arr.min() + 1e-8)
 
-    xig_vis = []
-    for index, point in enumerate(filtered_points):
+    # 映射颜色
+    qianya_colors = cmap(q_norm)[:, :3]
+    houya_colors = cmap(h_norm)[:, :3]
+    counter = 0
+    xhg_points = np.asarray(xhg_points)
+    N = len(xhg_points)
+    colors_all = np.ones((N, 3)) * 0.7  # 默认灰色
+    print('开始输出前牙可视化')
+    for index, point in enumerate(qianya_points):
         plane_coeffs, closest_point = compute_shortest_distance_to_curve_with_perpendicular_plane(
             xiayuanxiang_path_data, point
         )
-        slice_points, _ = extract_slice(xhg_points, plane_coeffs, closest_point)
-        slice_points = np.array(slice_points)  # 确保是 ndarray
-        N = slice_points.shape[0]
-        # 创建同样颜色的矩阵
-        colors = np.tile(np.array([121, 164, 121] ), (N, 1))
-        slice_with_color = np.hstack((slice_points, colors))
-        xig_vis.append(slice_with_color)
-    xig_vis_array = np.vstack(xig_vis)
-    filename = filename + '.txt'
-    np.savetxt(os.path.join(r'C:\yuechen\code\wuyahe\1.code\2.data-缩放\vis', filename),
-               xig_vis_array, fmt='%d %d %d %d %d %d')
+        a, b, c, d = plane_coeffs
+        color = qianya_colors[index]  # 每个 plane 一个颜色
+        # 点到平面距离
+        dist = np.abs(
+            xhg_points @ np.array([a, b, c]) + d
+        ) / np.linalg.norm([a, b, c])
+        mask = dist < 1
+        colors_all[mask] = color
+    print('开始输出后牙可视化')
+    for index, point in enumerate(houya_points):
+        plane_coeffs, closest_point = compute_shortest_distance_to_curve_with_perpendicular_plane(
+            xiayuanxiang_path_data, point
+        )
+        a, b, c, d = plane_coeffs
+        color = houya_colors[index]  # 每个 plane 一个颜色
+        # 点到平面距离
+        dist = np.abs(
+            xhg_points @ np.array([a, b, c]) + d
+        ) / np.linalg.norm([a, b, c])
+        mask = dist < 1.0
+        colors_all[mask] = color
+
+    gray_color = np.array([0.7, 0.7, 0.7])
+    mask_gray = (xhg_points[:, 1] < left_z_centroid[1]) | (xhg_points[:, 1] < left_z_centroid[1])
+    # 强制设置为灰色
+    colors_all[mask_gray] = gray_color
+
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(xhg_points)
+    pcd.colors = o3d.utility.Vector3dVector(colors_all)
+    o3d.visualization.draw_geometries([pcd])
+
+    colors_255 = (colors_all * 255).astype(np.uint8)
+    fina_xhg = np.hstack([xhg_points,colors_255])
+    os.makedirs(os.path.join(txt_path, 'vis'),exist_ok=True)
+    np.savetxt(os.path.join(txt_path, 'vis', f"{filename}.txt"), fina_xhg)
 
     print(f" {filename} 处理完成")
 
 
 if __name__ == "__main__":
     base_dir = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放"
+    txt_path = r'C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\pca-sum'
     output_base_dir = base_dir
     spacing = 0.3
     ct_dir = os.path.join(base_dir, "ct")
@@ -221,4 +258,4 @@ if __name__ == "__main__":
     success_count = 0
     for i, ct_path in enumerate(ct_files, 1):
         print(f"\n[{i}/{len(ct_files)}] 处理进度")
-        success = process_single_ct(ct_path, base_dir, output_base_dir)
+        success = process_single_ct(ct_path, base_dir, output_base_dir, txt_path)

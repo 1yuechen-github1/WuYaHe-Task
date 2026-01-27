@@ -664,9 +664,13 @@ def save_slices_as_png(slices_data, slices_mask, slice_names, output_dir, patien
     rgb[slices_mask == 0] = [0, 0, 0]
     rgb[(slices_mask == 0) & (slices_data == 3000)] = [0, 0, 0]
     img = Image.fromarray(rgb, 'RGB')
+
+    # non_zero_mask = slices_mask > 0
+    # non_zero_count = np.sum(non_zero_mask)
+    # total_pixels = slices_mask.size
+    # print(patient_id,slice_names, non_zero_count, total_pixels )
     output_path = f"{output_dir}/{patient_id}_{slice_names}.png"
     img.save(output_path)
-    # print(f"输入: {slices_data.shape}, 输出PNG: {img.size}")
     return output_path
 
 

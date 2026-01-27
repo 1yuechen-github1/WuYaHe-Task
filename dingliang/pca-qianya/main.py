@@ -9,7 +9,7 @@ from utils import *
 # 主程序
 if __name__ == "__main__":
     inp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\qianya-pca\img"
-    outp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\pca-sum\img"
+    outp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\qianya-pca\pca"
     os.makedirs(outp, exist_ok=True)
     os.makedirs(outp, exist_ok=True)
     total_files = 0
@@ -21,11 +21,11 @@ if __name__ == "__main__":
         
         name, ext_orig = os.path.splitext(file)
 
-        outp_file = os.path.join(outp, f"{name}{ext_orig}")
-        # prex = file.split(".")[0]
-        # prex = prex.split("_")[0]
-        # os.makedirs(os.path.join(outp,prex), exist_ok=True)
-        # outp_file = os.path.join(outp,prex, f"{name}{ext_orig}")
+        # outp_file = os.path.join(outp, f"{name}{ext_orig}")
+        prex = file.split(".")[0]
+        prex = prex.split("_")[0]
+        os.makedirs(os.path.join(outp,prex), exist_ok=True)
+        outp_file = os.path.join(outp,prex, f"{name}{ext_orig}")
         img = pil_imread(inp_file)  
         # pca 牙体长轴
         res= extract_tooth_long_axis(img, outp_file,file)
@@ -38,19 +38,34 @@ if __name__ == "__main__":
 
             id = file.split("_")[0]
             index = get_axiosx(rot_img, dist = 20)
-            if index is not None:
-                sta,end = cacul_x(index,rot_img) 
-                # (0, index), (wid-1, index) 起点终点  
+            index_top = get_axiosx_top(rot_img, dist=20)
+            if index is not None and index_top is not None:
+                sta,end = cacul_x(index,rot_img)
+                sta_top, end_top = cacul_x(index_top, rot_img)
                 cv2.line(vis1, (sta, index), (end, index), (35, 147, 66), 1)
+                cv2.line(vis1, (sta_top, index_top), (end_top, index_top), (35, 147, 66), 1)
             ys, xs = np.where(rot_img > 0) 
             points = np.array(list(zip(xs, ys)))
-            red_len = p1_rot[1] - index
+            inde_fir = get_fir(rot_img)
+            red_len = abs(index_top - index)
+            red_len1 = abs(inde_fir - index_top)
             print(file,red_len,p1_rot,p2_rot,center_rot,index)
-            # with open(f"{os.path.join(outp,prex)}"+'\len.txt', 'a') as f:
-            with open(f"{outp}" + '\len.txt', 'a') as f:
+            # with open(f"{outp}" + '\len.txt', 'a') as f:
+            with open(f"{outp}\\{prex}" + '\len.txt', 'a') as f:
                 f.write(f"{file},{red_len}\n")
             cv2.line(vis1, tuple(p1_rot), tuple(p2_rot), (0, 0, 255), 3)
-            cv2.circle(vis1, tuple(center_rot), 5, (255, 0, 0), -1)              
+            cv2.circle(vis1, tuple(center_rot), 5, (255, 0, 0), -1)
+            cv2.putText(
+                vis1,
+                text=f'a = {red_len * 0.3:.2f}mm',
+                org=(50, 50),
+                fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+                fontScale=1,
+                color=(0, 0, 255),
+                thickness=2,
+                lineType=cv2.LINE_AA
+            )
+
             # cv2.imshow("vis1",vis1)
             # cv2.waitKey(3000)            
             cv2.imencode('.jpg', vis1)[1].tofile(outp_file.replace(ext_orig,'.jpg'))
