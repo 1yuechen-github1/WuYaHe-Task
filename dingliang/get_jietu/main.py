@@ -24,8 +24,8 @@ def process_single_ct(ct_path, base_dir, output_base_dir):
     if not os.path.exists(label_path):
         print(f"❌ 跳过 {filename}: 对应的label文件不存在 - {label_path}")
         return False
-    output_dir = os.path.join(output_base_dir, "screenshot",'qianya',filename)
-    output_dir1 = os.path.join(output_base_dir, "screenshot",'houya',filename)
+    output_dir = os.path.join(output_base_dir, "screenshot",'houya',filename)
+    output_dir1 = os.path.join(output_base_dir, "screenshot",'qianya',filename)
     os.makedirs(output_dir1, exist_ok=True)
     os.makedirs(output_dir, exist_ok=True)
     output_files_dir = os.path.join(base_dir, "output", filename)
@@ -75,8 +75,6 @@ def process_single_ct(ct_path, base_dir, output_base_dir):
     str_point = right_xiaheguan_data[right_kekong_start_idx]
     
     # 把nifti转化点云后提取下缘线
-    # left_z_centroid = compute_y_mid_point(left_xiaheguan_data)
-    # right_z_centroid = compute_y_mid_point(right_xiaheguan_data)
     points = extract_mandible_inferior_points_from_txt(
         points=xhg_points,
         slice_thickness=2.0,
@@ -126,31 +124,8 @@ def process_single_ct(ct_path, base_dir, output_base_dir):
         dist1 = abs(current_z - abs((left_kekong[2] + right_kekong[2]) / 2))
         dist_list.append(dist1)
     optimal_offset = np.argmin(dist_list)
-    # print(offset_z , optimal_offset, abs(point[2] - (left_kekong[2] + right_kekong[2]) / 2))
     yagong_point = xiayuanxiang_path_data.copy()
     yagong_point[:, 2] = original_z + optimal_offset * 1
-    
-        
-    # nii_img = pointcloud_to_nifti(
-    #     points=yagong_point,
-    #     original_shape=shape,
-    #     voxel_size=spacing,
-    #     label_value=1,
-    #     verbose=True,
-    # )
-    # save_path = os.path.join(output_dir, filename+'.nii.gz')
-    # new_img = merge_xiayuanxiang(
-    # nii_img=nii_img,
-    # label_data=fdata,
-    # output_dir=output_dir,
-    # label_affine=affine,
-    # header=header,
-    # filename = filename
-    # )        
-    # save_path = os.path.join(output_dir, filename+'.nii.gz')
-    # print(filename,save_path,shape,abs(point[2] - (left_kekong[2] + right_kekong[2]) / 2))
-    # nib.save(new_img, save_path)
-
     left_z_centroid = (left_kekong + stl_point) / 2
     right_z_centroid = (right_kekong + str_point) / 2
     filt_l, filt_r = left_z_centroid[0], right_z_centroid[0]
@@ -172,21 +147,58 @@ def process_single_ct(ct_path, base_dir, output_base_dir):
     houya_list = []
     yagong_filt = np.asarray(yagong_filt)
     centers = np.asarray(fipoin_list)  
-    mask = np.ones(len(yagong_filt), dtype=bool)  
-    for center in centers:
-        distances = np.linalg.norm(yagong_filt - center, axis=1)
-        mask = mask & (distances > 2)
-        filtered_points = yagong_filt[mask]  
-    mid_pos = (left_kekong + right_kekong) / 2  
-    mid_y = mid_pos[1]    
-    y_coords = filtered_points[:, 1]
-    qianya_mask = y_coords > mid_y
-    houya_mask = y_coords <= mid_y
-    qianya_points = filtered_points[qianya_mask]
-    houya_points = filtered_points[houya_mask]
-    qianya_list.append(qianya_points)
-    houya_list.append(houya_points)   
+    mask = np.ones(len(yagong_filt), dtype=bool)
+    sorted_indices = np.argsort(yagong_filt[:, 0])  # 按照 x 轴排序
+    yagong_filt_x = yagong_filt[sorted_indices]
+    yagong_filt_xl,yagong_filt_xr = split_along_x(yagong_filt_x)
 
+    if lmax_midpoint[0] > lkq_midpoint[0]:
+       inde_lsta, inde_lend = get_star_end(lmax_midpoint, yagong_filt_xl, lkq_midpoint)
+    else:
+        inde_lsta, inde_lend = get_star_end(lkq_midpoint, yagong_filt_xl, lmax_midpoint)
+
+    maskl = np.ones(len(yagong_filt_xl), dtype=bool)
+    maskl = maskl & ~((yagong_filt_xl[:, 0] > yagong_filt_xl[inde_lsta, 0]) &(yagong_filt_xl[:, 0] < yagong_filt_xl[inde_lend, 0]))
+    yagong_filt_xl = yagong_filt_xl[maskl]
+
+    if rmax_midpoint[0] > rkq_midpoint[0]:
+       inde_rsta, inde_rend = get_star_end(rmax_midpoint, yagong_filt_xr, rkq_midpoint)
+    else:
+        inde_rsta, inde_rend = get_star_end(rkq_midpoint, yagong_filt_xr, rmax_midpoint)
+    maskr = np.ones(len(yagong_filt_xr), dtype=bool)
+    maskr = maskr & ~((yagong_filt_xr[:, 0] > yagong_filt_xr[inde_rsta, 0]) &(yagong_filt_xr[:, 0] < yagong_filt_xr[inde_rend, 0]))
+    yagong_filt_xr = yagong_filt_xr[maskr]
+
+    if lmax_midpoint[0] > lkq_midpoint[0]:
+        qianya_maskl = yagong_filt_xl[:,1] > lmax_midpoint[1]
+        houya_maskl = yagong_filt_xl[:, 1] < lmax_midpoint[1]
+    else:
+        qianya_maskl = yagong_filt_xl[:,1]  > lkq_midpoint[1]
+        houya_maskl = yagong_filt_xl[:, 1]  < lkq_midpoint[1]
+
+    if rmax_midpoint[0] > rkq_midpoint[0]:
+        qianya_maskr = yagong_filt_xr[:,1] < rmax_midpoint[1]
+        houya_maskr = yagong_filt_xr[:,1] > rmax_midpoint[1]
+    else:
+        qianya_maskr = yagong_filt_xr[:,1] < rkq_midpoint[1]
+        houya_maskr = yagong_filt_xr[:, 1] > rkq_midpoint[1]
+    # 分别筛选左右 mask 对应的点
+    houya_points_r = yagong_filt_xr[houya_maskr]
+    houya_points_l = yagong_filt_xl[houya_maskl]
+    qianya_points_r = yagong_filt_xr[qianya_maskr]
+    qianya_points_l = yagong_filt_xl[qianya_maskl]
+    qianya_points = np.vstack([houya_points_l, qianya_points_r])
+    houya_points = np.vstack([qianya_points_l, houya_points_r])
+
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(qianya_points)
+
+    pcd1 = o3d.geometry.PointCloud()
+    pcd1.points = o3d.utility.Vector3dVector(houya_points)
+
+    vis([pcd, pcd1],'可视化')
+    vis([pcd], '可视化')
+    vis([ pcd1], '可视化')
     print('开始输出前牙截图')
     counter = 0
     for index, point in enumerate(qianya_points):    
@@ -215,10 +227,10 @@ def process_single_ct(ct_path, base_dir, output_base_dir):
     print(f" {filename} 处理完成")        
 
 if __name__ == "__main__":
-    base_dir = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\wash"
+    base_dir = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放"
     output_base_dir = base_dir  
     spacing = 0.3
-    ct_dir = os.path.join(base_dir, "wash")
+    ct_dir = os.path.join(base_dir, "ct")
     if not os.path.exists(ct_dir):
         print(f"❌ CT目录不存在: {ct_dir}")
         exit(1)

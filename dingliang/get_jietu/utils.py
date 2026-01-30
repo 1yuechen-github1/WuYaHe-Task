@@ -1293,18 +1293,6 @@ def geodesic_with_radial_constraint(points, start_idx, k=15):
     
     return dijkstra(adj, indices=[start_idx], directed=False)[0]
 
-# def filt_point(left_kekong, right_kekong,sorted_points):
-#     radius = 5
-#     l_kekong = np.array(left_kekong)
-#     r_kekong = np.array(right_kekong)
-#     s_points = np.array(sorted_points)
-#     dist_l = np.linalg.norm(s_points - l_kekong, axis=1)
-#     dist_r = np.linalg.norm(s_points - r_kekong, axis=1)
-#     mask = (dist_l > radius) & (dist_r > radius)
-#     filtered_points = s_points[mask]
-#     print(sorted_points.shape, filtered_points.shape)
-#     return 
-
 def find_min_dist_poin(point,yagong_point):
     point = np.asarray(point)
     yagong_point = np.asarray(yagong_point)
@@ -1313,4 +1301,33 @@ def find_min_dist_poin(point,yagong_point):
     min_distance = distances[min_index]
     min_point = yagong_point[min_index]
     return min_point
-    
+
+def get_star_end(lmax_midpoint, yagong_filt_xl, lkq_midpoint):
+    lsta = np.argwhere(yagong_filt_xl == lkq_midpoint)[0][0]
+    lend = np.argwhere(yagong_filt_xl == lmax_midpoint)[0][0]
+    inde_sta = lsta # 找起点
+    dist = 0
+    for i in range(lsta, -1, -1):
+        dist_sta = np.linalg.norm(yagong_filt_xl[lsta] - yagong_filt_xl[i])
+        dist += dist_sta
+        if dist_sta > 2:
+            inde_sta = i
+            dist = 0
+            break
+    inde_end = lend # 找终点
+    for i in range(lend, len(yagong_filt_xl)):
+        dist_end = np.linalg.norm(yagong_filt_xl[lend] - yagong_filt_xl[i])
+        if dist_end > 2:
+            inde_end = i
+            dist = 0
+            break
+    return inde_sta, inde_end
+
+
+def vis(pcd_list, file):
+    o3d.visualization.draw_geometries(
+        pcd_list,
+        window_name=f"Point Clouds: {file}",
+        width=800,
+        height=600
+    )

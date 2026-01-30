@@ -7,7 +7,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from scipy.ndimage import affine_transform
 from scipy.ndimage import map_coordinates
 import open3d as o3d
-from scipy.spatial import KDTree
+from scipy.spatial import KDTree, cKDTree
 from mpl_toolkits.mplot3d import Axes3D
 from scipy.sparse.csgraph import dijkstra, connected_components
 from scipy.optimize import minimize
@@ -1229,8 +1229,64 @@ def find_min_dist_poin(point, yagong_point):
     min_point = yagong_point[min_index]
     return min_point
 
-def truncate_colormap(cmap, minval=0.0, maxval=1.0, n=256):
-    new_cmap = LinearSegmentedColormap.from_list(
-        'truncated_cmap', cmap(np.linspace(minval, maxval, n))
+def get_houya_col(pm_len):
+    key_lens = np.array([0,6,8])
+
+    #红色 黄色 绿色
+    key_colors = np.array([
+        [255, 0, 0],
+        [255, 178, 102],
+        # [255,255,0],
+        [0,255,0]
+    ])
+    ids = np.searchsorted(key_lens, pm_len) - 1
+    idx = min(max(ids,0), len(key_lens)-2)
+    t = (pm_len - key_lens[idx]) / (key_lens[idx+1] - key_lens[idx])
+    col = (1-t)*key_colors[idx] + t*key_colors[idx+1]
+    print('pm_len:', pm_len, 'col',col)
+    return (col/255.0).tolist()
+
+
+def paint_between_planes(points, plane1, plane2, color1, color2):
+    max_dist = 2
+    a1, b1, c1, d1 = plane1
+    a2, b2, c2, d2 = plane2
+    n1 = np.array([a1, b1, c1])
+    n2 = np.array([a2, b2, c2])
+    s1 = points @ n1 + d1
+    s2 = points @ n2 + d2
+    between_mask = (s1 * s2) <= 0
+    between_mask &= (np.abs(s1) <= max_dist) & (np.abs(s2) <= max_dist)
+    idx = np.where(between_mask)[0]
+    if len(idx) == 0:
+        return between_mask, None
+    d1_abs = np.abs(s1[idx])
+    d2_abs = np.abs(s2[idx])
+    w = d1_abs / (d1_abs + d2_abs + 1e-8)
+    blended = (
+        (1 - w)[:, None] * color1 +
+        w[:, None] * color2
     )
-    return new_cmap
+    return between_mask, blended
+
+
+def get_star_end(lmax_midpoint, yagong_filt_xl, lkq_midpoint):
+    lsta = np.argwhere(yagong_filt_xl == lkq_midpoint)[0][0]
+    lend = np.argwhere(yagong_filt_xl == lmax_midpoint)[0][0]
+    inde_sta = lsta # 找起点
+    dist = 0
+    for i in range(lsta, -1, -1):
+        dist_sta = np.linalg.norm(yagong_filt_xl[lsta] - yagong_filt_xl[i])
+        dist += dist_sta
+        if dist_sta > 2:
+            inde_sta = i
+            dist = 0
+            break
+    inde_end = lend # 找终点
+    for i in range(lend, len(yagong_filt_xl)):
+        dist_end = np.linalg.norm(yagong_filt_xl[lend] - yagong_filt_xl[i])
+        if dist_end > 2:
+            inde_end = i
+            dist = 0
+            break
+    return inde_sta, inde_end
