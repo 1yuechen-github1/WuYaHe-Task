@@ -247,150 +247,6 @@ def filter_points_by_perpendicular_planes(jaw_points, left_plane_coeffs, right_p
     return np.array(filtered_points)
 
 
-def visualize_with_open3d(left_xiaheguan_data, right_xiaheguan_data,
-                          xiayuanxiang_path_data, xiahegu_path_data,
-
-                          left_plane_coeffs, right_plane_coeffs,
-                          left_closest_point, right_closest_point,
-
-                          left_plane_xiahekong_coeffs, right_plane_xiahekong_coeffs,
-                          left_xiahekong_closest_point, right_closest_xiahekong_point,
-
-                          plane_coeffs_mid, max_y_point):
-    """
-    使用Open3D快速可视化处理结果
-    """
-    # 创建可视化窗口
-    vis = o3d.visualization.Visualizer()
-    vis.create_window(width=1200, height=800)
-
-    # 1. 创建点云对象
-    def create_pcd(points, color):
-        pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(points)
-        pcd.paint_uniform_color(color)
-        return pcd
-
-    # 创建各点云
-    left_pcd = create_pcd(left_xiaheguan_data, [1, 0, 0])  # 红色: 左下颌管
-    right_pcd = create_pcd(right_xiaheguan_data, [0, 0, 1])  # 蓝色: 右下颌管
-    curve_pcd = create_pcd(xiayuanxiang_path_data, [0, 1, 0])  # 绿色: 下缘线
-    raw_jaw_pcd = create_pcd(xiahegu_path_data, [0.5, 0.5, 0.5])  # 灰色: 原始下颌骨
-
-    def create_plane_mesh(plane_coeffs, center, length=70, width=70, color=[0, 1, 1]):
-        """
-        创建平面网格，可独立控制长宽，支持垂直平面
-
-        参数:
-            plane_coeffs: 平面方程系数 [a, b, c, d] (ax + by + cz + d = 0)
-            center: 平面中心点 [x, y, z]
-            length: X方向的长度（默认70）
-            width: Y方向的宽度（默认70）
-            color: 平面颜色（默认青色）
-
-        返回:
-            o3d.geometry.TriangleMesh: 平面网格对象
-        """
-        a, b, c, d = plane_coeffs
-
-        # 检查平面是否垂直于Z轴（c=0）
-        if np.isclose(c, 0):
-            # 处理垂直平面
-            if not np.isclose(a, 0):
-                # 平面方程: ax + d = 0 → x = -d/a (垂直于X轴的平面)
-                x_const = -d / a
-                yy, zz = np.meshgrid(
-                    np.linspace(center[1] - width / 2, center[1] + width / 2, 2),
-                    np.linspace(center[2] - length / 2, center[2] + length / 2, 2)
-                )
-                xx = np.full_like(yy, x_const)
-            elif not np.isclose(b, 0):
-                # 平面方程: by + d = 0 → y = -d/b (垂直于Y轴的平面)
-                y_const = -d / b
-                xx, zz = np.meshgrid(
-                    np.linspace(center[0] - length / 2, center[0] + length / 2, 2),
-                    np.linspace(center[2] - width / 2, center[2] + width / 2, 2)
-                )
-                yy = np.full_like(xx, y_const)
-            else:
-                raise ValueError("平面方程无效：a, b, c 不能同时为零")
-        else:
-            # 普通平面（非垂直）
-            xx, yy = np.meshgrid(
-                np.linspace(center[0] - length / 2, center[0] + length / 2, 2),
-                np.linspace(center[1] - width / 2, center[1] + width / 2, 2)
-            )
-            zz = (-a * xx - b * yy - d) / c
-
-        # 构建顶点和三角形
-        vertices = np.vstack([xx.ravel(), yy.ravel(), zz.ravel()]).T
-        triangles = np.array([[0, 1, 2], [1, 2, 3]])  # 两个三角形拼合成矩形
-
-        # 创建Open3D网格对象
-        mesh = o3d.geometry.TriangleMesh()
-        mesh.vertices = o3d.utility.Vector3dVector(vertices)
-        mesh.triangles = o3d.utility.Vector3iVector(triangles)
-        mesh.compute_vertex_normals()
-        mesh.paint_uniform_color(color)
-
-        return mesh
-
-    # 中点
-    left_plane = create_plane_mesh(left_plane_coeffs, left_closest_point, color=[1, 0.5, 0.5])
-    right_plane = create_plane_mesh(right_plane_coeffs, right_closest_point, color=[0.5, 0.5, 1])
-
-    # y最小
-    left_plane_min = create_plane_mesh(left_plane_xiahekong_coeffs, left_xiahekong_closest_point, color=[1, 1, 1])
-    right_plane_min = create_plane_mesh(right_plane_xiahekong_coeffs, right_closest_xiahekong_point,
-                                        color=[0.5, 0.5, 1])
-
-    plane_mid = create_plane_mesh(plane_coeffs_mid, max_y_point, length=20, width=20, color=[0.5, 0.5, 1])
-
-    # 3. 创建最近点标记
-    def create_sphere(center, radius=0.5, color=[1, 1, 0]):
-        sphere = o3d.geometry.TriangleMesh.create_sphere(radius=radius)
-        sphere.translate(center)
-        sphere.paint_uniform_color(color)
-        return sphere
-
-    # 中点
-    left_sphere = create_sphere(left_closest_point)
-    right_sphere = create_sphere(right_closest_point, color=[1, 0.5, 0])
-
-    # y最大
-    left_sphere_y_min = create_sphere(left_xiahekong_closest_point)
-    right_sphere_y_min = create_sphere(right_closest_xiahekong_point, color=[1, 0.7, 0])
-
-    sphere_y_mid = create_sphere(max_y_point, color=[1, 0.7, 0])
-
-    # 4. 添加所有几何体到可视化
-    vis.add_geometry(left_pcd)
-    vis.add_geometry(right_pcd)
-    vis.add_geometry(curve_pcd)
-    # vis.add_geometry(raw_jaw_pcd)
-    # vis.add_geometry(filtered_pcd)
-    # vis.add_geometry(left_plane)
-    # vis.add_geometry(right_plane)
-    vis.add_geometry(left_sphere)
-    vis.add_geometry(right_sphere)
-
-    # vis.add_geometry(left_plane_min)
-    # vis.add_geometry(right_plane_min)
-    vis.add_geometry(left_sphere_y_min)
-    vis.add_geometry(right_sphere_y_min)
-
-    vis.add_geometry(sphere_y_mid)
-    vis.add_geometry(plane_mid)
-
-    # 5. 设置渲染选项
-    opt = vis.get_render_option()
-    opt.point_size = 2.0
-    opt.background_color = np.asarray([0.1, 0.1, 0.1])
-
-    # 6. 运行可视化
-    vis.run()
-    vis.destroy_window()
-
 
 def find_closest_point(curve_points, target_point):
     distances = np.linalg.norm(curve_points - target_point[:2], axis=1)
@@ -1290,3 +1146,26 @@ def get_star_end(lmax_midpoint, yagong_filt_xl, lkq_midpoint):
             dist = 0
             break
     return inde_sta, inde_end
+
+def get_clo_list(bone_len, min_val, max_val):
+    if bone_len <= 6:
+        # 橙 -> 红（局部 0~1）
+        t = (bone_len - min_val) / (6 - min_val)
+        t = np.clip(t, 0, 1)
+        r = 1.0
+        g = 1 - t
+        b = 0.4
+    elif 6 < bone_len <= 8:
+        # 黄 -> 绿
+        t = (bone_len - 6) / (8 - 6)
+        t = np.clip(t, 0, 1)
+        r = 1 - t
+        g = 1.0
+        b = 0.4
+    else:
+        r = 0.7
+        g = 1.0
+        b = 0.2
+    return [r, g, b]
+
+

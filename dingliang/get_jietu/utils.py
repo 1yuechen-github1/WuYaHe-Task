@@ -23,6 +23,8 @@ from scipy.ndimage import label
 from PIL import Image
 import numpy as np
 import os
+import matplotlib as mpl
+from matplotlib import cm
 
 def create_plane_from_three_points(p1, p2, p3):
     """
@@ -233,151 +235,6 @@ def filter_points_by_perpendicular_planes(jaw_points, left_plane_coeffs, right_p
             filtered_points.append(point)
     return np.array(filtered_points)
 
-def visualize_with_open3d(left_xiaheguan_data, right_xiaheguan_data,
-                         xiayuanxiang_path_data, xiahegu_path_data,
-
-                         left_plane_coeffs, right_plane_coeffs,
-                         left_closest_point, right_closest_point,
-
-                         left_plane_xiahekong_coeffs,right_plane_xiahekong_coeffs,
-                         left_xiahekong_closest_point,right_closest_xiahekong_point,
-
-                         plane_coeffs_mid,max_y_point):
-    """
-    使用Open3D快速可视化处理结果
-    """
-    # 创建可视化窗口
-    vis = o3d.visualization.Visualizer()
-    vis.create_window(width=1200, height=800)
-    
-    # 1. 创建点云对象
-    def create_pcd(points, color):
-        pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(points)
-        pcd.paint_uniform_color(color)
-        return pcd
-    
-    # 创建各点云
-    left_pcd = create_pcd(left_xiaheguan_data, [1, 0, 0])  # 红色: 左下颌管
-    right_pcd = create_pcd(right_xiaheguan_data, [0, 0, 1])  # 蓝色: 右下颌管
-    curve_pcd = create_pcd(xiayuanxiang_path_data, [0, 1, 0])  # 绿色: 下缘线
-    raw_jaw_pcd = create_pcd(xiahegu_path_data, [0.5, 0.5, 0.5])  # 灰色: 原始下颌骨    
-
-    def create_plane_mesh(plane_coeffs, center, length=70, width=70, color=[0, 1, 1]):
-        """
-        创建平面网格，可独立控制长宽，支持垂直平面
-
-        参数:
-            plane_coeffs: 平面方程系数 [a, b, c, d] (ax + by + cz + d = 0)
-            center: 平面中心点 [x, y, z]
-            length: X方向的长度（默认70）
-            width: Y方向的宽度（默认70）
-            color: 平面颜色（默认青色）
-
-        返回:
-            o3d.geometry.TriangleMesh: 平面网格对象
-        """
-        a, b, c, d = plane_coeffs
-
-        # 检查平面是否垂直于Z轴（c=0）
-        if np.isclose(c, 0):
-            # 处理垂直平面
-            if not np.isclose(a, 0):
-                # 平面方程: ax + d = 0 → x = -d/a (垂直于X轴的平面)
-                x_const = -d / a
-                yy, zz = np.meshgrid(
-                    np.linspace(center[1] - width/2, center[1] + width/2, 2),
-                    np.linspace(center[2] - length/2, center[2] + length/2, 2)
-                )
-                xx = np.full_like(yy, x_const)
-            elif not np.isclose(b, 0):
-                # 平面方程: by + d = 0 → y = -d/b (垂直于Y轴的平面)
-                y_const = -d / b
-                xx, zz = np.meshgrid(
-                    np.linspace(center[0] - length/2, center[0] + length/2, 2),
-                    np.linspace(center[2] - width/2, center[2] + width/2, 2)
-                )
-                yy = np.full_like(xx, y_const)
-            else:
-                raise ValueError("平面方程无效：a, b, c 不能同时为零")
-        else:
-            # 普通平面（非垂直）
-            xx, yy = np.meshgrid(
-                np.linspace(center[0] - length/2, center[0] + length/2, 2),
-                np.linspace(center[1] - width/2, center[1] + width/2, 2)
-            )
-            zz = (-a * xx - b * yy - d) / c
-
-        # 构建顶点和三角形
-        vertices = np.vstack([xx.ravel(), yy.ravel(), zz.ravel()]).T
-        triangles = np.array([[0, 1, 2], [1, 2, 3]])  # 两个三角形拼合成矩形
-
-        # 创建Open3D网格对象
-        mesh = o3d.geometry.TriangleMesh()
-        mesh.vertices = o3d.utility.Vector3dVector(vertices)
-        mesh.triangles = o3d.utility.Vector3iVector(triangles)
-        mesh.compute_vertex_normals()
-        mesh.paint_uniform_color(color)
-
-        return mesh
-
-    # 中点
-    left_plane = create_plane_mesh(left_plane_coeffs, left_closest_point, color=[1, 0.5, 0.5])
-    right_plane = create_plane_mesh(right_plane_coeffs, right_closest_point, color=[0.5, 0.5, 1])
-
-    # y最小
-    left_plane_min = create_plane_mesh(left_plane_xiahekong_coeffs, left_xiahekong_closest_point, color=[1, 1, 1])
-    right_plane_min = create_plane_mesh(right_plane_xiahekong_coeffs, right_closest_xiahekong_point, color=[0.5, 0.5, 1])
-
-    plane_mid = create_plane_mesh(plane_coeffs_mid, max_y_point, length=20, width=20, color=[0.5, 0.5, 1])
-
-    
-    # 3. 创建最近点标记
-    def create_sphere(center, radius=0.5, color=[1, 1, 0]):
-        sphere = o3d.geometry.TriangleMesh.create_sphere(radius=radius)
-        sphere.translate(center)
-        sphere.paint_uniform_color(color)
-        return sphere
-    
-    # 中点
-    left_sphere = create_sphere(left_closest_point)
-    right_sphere = create_sphere(right_closest_point, color=[1, 0.5, 0])
-
-    # y最大
-    left_sphere_y_min = create_sphere(left_xiahekong_closest_point)
-    right_sphere_y_min = create_sphere(right_closest_xiahekong_point, color=[1, 0.7, 0])
-
-    sphere_y_mid = create_sphere(max_y_point, color=[1, 0.7, 0])
-
-    
-    # 4. 添加所有几何体到可视化
-    vis.add_geometry(left_pcd)
-    vis.add_geometry(right_pcd)
-    vis.add_geometry(curve_pcd)
-    # vis.add_geometry(raw_jaw_pcd)
-    # vis.add_geometry(filtered_pcd)
-    # vis.add_geometry(left_plane)
-    # vis.add_geometry(right_plane)
-    vis.add_geometry(left_sphere)
-    vis.add_geometry(right_sphere)
-
-    # vis.add_geometry(left_plane_min)
-    # vis.add_geometry(right_plane_min)
-    vis.add_geometry(left_sphere_y_min)
-    vis.add_geometry(right_sphere_y_min)
-
-    vis.add_geometry(sphere_y_mid)
-    vis.add_geometry(plane_mid)
-    
-    # 5. 设置渲染选项
-    opt = vis.get_render_option()
-    opt.point_size = 2.0
-    opt.background_color = np.asarray([0.1, 0.1, 0.1])
-    
-    # 6. 运行可视化
-    vis.run()
-    vis.destroy_window()
-
 def find_closest_point(curve_points, target_point):
     distances = np.linalg.norm(curve_points - target_point[:2], axis=1)
     return np.argmin(distances)
@@ -401,38 +258,6 @@ def trans_to_nifti(plane_coeffs, pointcloud_point, nifti_img,affine):
     nifti_plane_coeffs = [nifti_normal[0], nifti_normal[1], nifti_normal[2], nifti_D]
     return nifti_plane_coeffs, nifti_center_point
 
-#
-# def extract_slice(ct_data, label_data, plane_coeffs, center_point, index, lenth_sli,
-#                                   length=300, height=400):
-#     """
-#     在NIfTI坐标系中从给定的平面提取正交截面
-#     """
-#     # ct_data[(label_data == 2) | (label_data == 3)] = 3100
-#     A, B, C, D = plane_coeffs
-#     normal = np.array([A, B, C])
-#     normal = normal / np.linalg.norm(normal)
-#     if abs(normal[0]) < 0.8 and index > (lenth_sli / 2):
-#         u_vec = np.array([1, 0, 0])
-#     elif abs(normal[0]) < 0.8 and index < (lenth_sli / 2):
-#          u_vec = np.array([-1, 0, 0])
-#     else:
-#         u_vec = np.array([0, 1, 0])
-#     print(index,u_vec,normal)
-#     u_vec = u_vec - np.dot(u_vec, normal) * normal
-#     u_vec = u_vec / np.linalg.norm(u_vec)
-#     v_vec = np.cross(normal, u_vec)
-#     u = np.linspace(-length / 2, length / 2, length)
-#     v = np.linspace(-height / 2, height / 2, height)
-#     uu, vv = np.meshgrid(u, v)
-#     xs = center_point[0] + uu * u_vec[0] + vv * v_vec[0]
-#     ys = center_point[1] + uu * u_vec[1] + vv * v_vec[1]
-#     zs = center_point[2] + uu * u_vec[2] + vv * v_vec[2]
-#     coords = np.stack([xs.ravel(), ys.ravel(), zs.ravel()], axis=0)
-#     slice_img = map_coordinates(ct_data, coords, order=0, mode='constant').reshape(height, length)
-#     mask_img = map_coordinates(label_data, coords, order=0, mode='constant').reshape(height, length)
-#     return slice_img ,mask_img
-
-
 def extract_slice(ct_data, label_data, plane_coeffs, center_point, index, lenth_sli,
                                   length=300, height=400):
     """
@@ -442,12 +267,6 @@ def extract_slice(ct_data, label_data, plane_coeffs, center_point, index, lenth_
     A, B, C, D = plane_coeffs
     normal = np.array([A, B, C])
     normal = normal / np.linalg.norm(normal)
-    # if abs(normal[0]) < 0.8 and index > (lenth_sli / 2):
-    #     u_vec = np.array([-0.7071, 0.7071, 0])
-    # elif abs(normal[0]) < 0.8 and index < (lenth_sli / 2):
-    #      u_vec = np.array([-1, 0, 0])
-    # else:
-    #     u_vec = np.array([0, 1, 0])
     u_vec = np.array([0, 1, 0])
     print(index,u_vec,normal)
     u_vec = u_vec - np.dot(u_vec, normal) * normal
@@ -632,26 +451,6 @@ def find_plane_intersection_line(plane1, plane2, ct_data,affine,header):
     vol = draw_line_3d(p1, p2, vol)
     nii_vol = nib.Nifti1Image(vol, affine, header)
     return nii_vol
-
-
-# def save_slices_as_png(slices_data, slices_mask, slice_names, output_dir, patient_id):
-#     os.makedirs(output_dir, exist_ok=True)
-#     norm_data = ((slices_data - slices_data.min()) / (slices_data.max() - slices_data.min() + 1e-8) * 255).astype(np.uint8)
-#     rgb = np.stack([norm_data]*3, axis=-1)
-#     print('slices_data:',slices_data.shape, 'norm_data:',norm_data.shape)
-#     mask_condition = (slices_mask == 2) | (slices_mask == 3)
-#     rgb[mask_condition] = [0, 0, 255]  # 蓝色
-#     rgb[slices_mask == 0] = [0, 0, 0]
-#     # rgb[data == 3000] = [0, 255, 0]  # 绿色
-#     rgb[(slices_mask == 0) & (slices_data == 3000)] = [0, 0, 0]
-#     plt.figure(facecolor='black')
-#     plt.imshow(rgb)
-#     plt.axis('off')
-#     plt.savefig(f"{output_dir}/{patient_id}_{slice_names}.png", bbox_inches='tight', dpi=150)
-
-
-
-
 def save_slices_as_png(slices_data, slices_mask, slice_names, output_dir, patient_id):
     os.makedirs(output_dir, exist_ok=True)
     norm_data = ((slices_data - slices_data.min()) / (slices_data.max() - slices_data.min() + 1e-8) * 255).astype(np.uint8)
@@ -837,7 +636,7 @@ def spline_fit_3d(points, smoothing=0.1, degree=3):
     points_t = points.T
     tck, u = splprep(points_t, s=smoothing * len(points), k=degree)
     # 生成更密集的采样点
-    u_new = np.linspace(0, 1, 200)  # 增加采样点数量
+    u_new = np.linspace(0, 1, 1500)  # 修改采样点数量
     curve_points = splev(u_new, tck)
     curve_points = np.array(curve_points).T
     # 计算导数（切线方向）
@@ -1300,26 +1099,42 @@ def find_min_dist_poin(point,yagong_point):
     min_index = np.argmin(distances)
     min_distance = distances[min_index]
     min_point = yagong_point[min_index]
+    print('min_point:',min_point,'min_distance:',min_distance)
     return min_point
 
-def get_star_end(lmax_midpoint, yagong_filt_xl, lkq_midpoint):
-    lsta = np.argwhere(yagong_filt_xl == lkq_midpoint)[0][0]
-    lend = np.argwhere(yagong_filt_xl == lmax_midpoint)[0][0]
-    inde_sta = lsta # 找起点
-    dist = 0
-    for i in range(lsta, -1, -1):
-        dist_sta = np.linalg.norm(yagong_filt_xl[lsta] - yagong_filt_xl[i])
-        dist += dist_sta
-        if dist_sta > 2:
-            inde_sta = i
-            dist = 0
+
+def get_star_end(lmax_midpoint, yagong_filt_xl, lkq_midpoint, threshold=2.0):
+    # lsta_idx = np.where(np.all(yagong_filt_xl == lkq_midpoint, axis=1))[0]
+    # lend_idx = np.where(np.all(yagong_filt_xl == lmax_midpoint, axis=1))[0]
+    print('lmax_midpoint:',lmax_midpoint)
+    print('yagong_filt_xl:',yagong_filt_xl)
+    print('lkq_midpoint:',lkq_midpoint)
+    dist = np.linalg.norm(yagong_filt_xl - lkq_midpoint, axis=1)
+    dist1 = np.linalg.norm(yagong_filt_xl - lmax_midpoint, axis=1)
+    print('dist:',dist)
+    print('dist1:',dist1)
+    lsta_idx = np.where(dist < 1e-2)[0]  # 1e-3 可以根据坐标尺度调节
+
+    lend_idx = np.where(dist1 < 1e-2)[0]
+
+
+    if len(lsta_idx) == 0 or len(lend_idx) == 0:
+        raise ValueError("起点或终点在曲线数组中未找到")
+    lsta = lsta_idx[0]
+    lend = lend_idx[0]
+    inde_sta = lsta
+    accum_dist = 0
+    for i in range(lsta, 0, -1):
+        accum_dist += np.linalg.norm(yagong_filt_xl[i] - yagong_filt_xl[i-1])
+        if accum_dist >= threshold:
+            inde_sta = i-1
             break
-    inde_end = lend # 找终点
-    for i in range(lend, len(yagong_filt_xl)):
-        dist_end = np.linalg.norm(yagong_filt_xl[lend] - yagong_filt_xl[i])
-        if dist_end > 2:
-            inde_end = i
-            dist = 0
+    inde_end = lend
+    accum_dist = 0
+    for i in range(lend, len(yagong_filt_xl)-1):
+        accum_dist += np.linalg.norm(yagong_filt_xl[i+1] - yagong_filt_xl[i])
+        if accum_dist >= threshold:
+            inde_end = i+1
             break
     return inde_sta, inde_end
 
@@ -1331,3 +1146,81 @@ def vis(pcd_list, file):
         width=800,
         height=600
     )
+
+
+def get_clo_list(bone_len, min_val, max_val):
+    if bone_len <= 6:
+        # 橙 -> 红（局部 0~1）
+        t = (bone_len - min_val) / (6 - min_val)
+        t = np.clip(t, 0, 1)
+        r = 1.0
+        g = 1 - t
+        b = 0.4
+    elif 6 < bone_len <= 8:
+        # 黄 -> 绿
+        t = (bone_len - 6) / (8 - 6)
+        t = np.clip(t, 0, 1)
+        r = 1 - t
+        g = 1.0
+        b = 0.4
+    else:
+        r = 0.7
+        g = 1.0
+        b = 0.2
+    return [r, g, b]
+
+
+
+def paint_between_planes(points, plane1, plane2, color1, color2):
+    max_dist = 2
+    a1, b1, c1, d1 = plane1
+    a2, b2, c2, d2 = plane2
+    n1 = np.array([a1, b1, c1])
+    n2 = np.array([a2, b2, c2])
+    s1 = points @ n1 + d1
+    s2 = points @ n2 + d2
+    between_mask = (s1 * s2) <= 0
+    between_mask &= (np.abs(s1) <= max_dist) & (np.abs(s2) <= max_dist)
+    idx = np.where(between_mask)[0]
+    if len(idx) == 0:
+        return between_mask, None
+    d1_abs = np.abs(s1[idx])
+    d2_abs = np.abs(s2[idx])
+    w = d1_abs / (d1_abs + d2_abs + 1e-8)
+    blended = (
+        (1 - w)[:, None] * color1 +
+        w[:, None] * color2
+    )
+    return between_mask, blended
+
+def get_col(length):
+    cmap = mpl.colors.LinearSegmentedColormap.from_list(
+        'red_yellow_green', ['red', 'yellow', 'green']
+    )
+    norm = mpl.colors.Normalize(vmin=6, vmax=8)
+
+    if length < 6:
+        return [1.0, 0.0, 0.0]      # 红
+    elif length > 8:
+        return [0.0, 0.5, 0.0]      # 深绿
+    else:
+        r, g, b, _ = cmap(norm(length))
+        return [r, g, b]            # ⚠️ 直接返回 0~1
+
+
+
+def filt_curve(qianya_points, dist):
+    qianya_points = qianya_points[np.argsort(qianya_points[:, 0])]
+    qianya_list = [qianya_points[0]]
+    accum_dist = 0  # 累计距离
+
+    for i in range(1, len(qianya_points)):
+        # 计算测地距离（沿曲线，累加欧氏距离）
+        segment_length = np.linalg.norm(qianya_points[i] - qianya_points[i - 1])
+        accum_dist += segment_length
+
+        if accum_dist >= dist:
+            qianya_list.append(qianya_points[i])
+            accum_dist = 0  # 重置累计距离
+
+    return np.array(qianya_list)

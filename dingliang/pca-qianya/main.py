@@ -8,8 +8,8 @@ from utils import *
 
 # 主程序
 if __name__ == "__main__":
-    inp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\pca-sum\qianya\img"
-    outp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\pca-sum\qianya\pca"
+    inp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\pca-sum\qianya"
+    outp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\pca-sum\pca-qianya"
     os.makedirs(outp, exist_ok=True)
     os.makedirs(outp, exist_ok=True)
     total_files = 0

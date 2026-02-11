@@ -8,8 +8,8 @@ from utils import *
 
 # 主程序
 if __name__ == "__main__":
-    inp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\pca-sum\houya\img"
-    outp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\pca-sum\houya\pca"
+    inp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\PCA\IMG"
+    outp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\PCA\PCA"
     os.makedirs(outp, exist_ok=True)
     os.makedirs(outp, exist_ok=True)
     total_files = 0
@@ -53,7 +53,7 @@ if __name__ == "__main__":
             print(p1_rot[1],p2_rot[1],index)
             # with open(f"{outp}" + '\len.txt', 'a') as f:
             with open(f"{outp}\\{prex}" + '\len.txt', 'a') as f:
-                f.write(f"{file},{red_len},{red_len1}\n")
+                f.write(f"{file},{red_len * 0.3}\n")
             cv2.line(vis1, tuple(p1_rot), tuple(p2_rot), (0, 0, 255), 3)
             cv2.circle(vis1, tuple(center_rot), 5, (255, 0, 0), -1)
             cv2.putText(
