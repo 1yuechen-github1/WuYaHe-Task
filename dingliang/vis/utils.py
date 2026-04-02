@@ -27,6 +27,23 @@ import numpy as np
 import os
 
 
+def filt_curve(qianya_points, dist):
+    qianya_points = qianya_points[np.argsort(qianya_points[:, 0])]
+    qianya_list = [qianya_points[0]]
+    accum_dist = 0  # 累计距离
+
+    for i in range(1, len(qianya_points)):
+        # 计算测地距离（沿曲线，累加欧氏距离）
+        segment_length = np.linalg.norm(qianya_points[i] - qianya_points[i - 1])
+        accum_dist += segment_length
+
+        if accum_dist >= dist:
+            qianya_list.append(qianya_points[i])
+            accum_dist = 0  # 重置累计距离
+
+    return np.array(qianya_list)
+
+
 def create_plane_from_three_points(p1, p2, p3):
     """
     根据三个点创建平面方程
@@ -1153,7 +1170,7 @@ def get_clo_list(bone_len, min_val, max_val):
         t = (bone_len - min_val) / (6 - min_val)
         t = np.clip(t, 0, 1)
         r = 1.0
-        g = 1 - t
+        g = 0
         b = 0.4
     elif 6 < bone_len <= 8:
         # 黄 -> 绿

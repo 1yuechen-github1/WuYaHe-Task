@@ -123,6 +123,7 @@ def process_single_ct(ct_path, base_dir, output_base_dir):
         dist1 = abs(current_z - abs((left_kekong[2] + right_kekong[2]) / 2))
         dist_list.append(dist1)
     optimal_offset = np.argmin(dist_list)
+    # optimal_offset = 0
     print(offset_z , optimal_offset, abs(point[2] - (left_kekong[2] + right_kekong[2]) / 2))
     yagong_point = xiayuanxiang_path_data.copy()
     yagong_point[:, 2] = original_z + optimal_offset * 1
@@ -243,10 +244,10 @@ def process_single_ct(ct_path, base_dir, output_base_dir):
         ct_data, fdata, left_xiahekong_coeffs_nifti, left_xiahekong_center_nifti)
     right_xiahekong_slice,right_xiahekong_mk = extract_slice(
         ct_data, fdata, right_xiahekong_coeffs_nifti, right_xiahekong_center_nifti)
-    # mid_slice, mid_mk = extract_slice(
-    #     high_hu_img.get_fdata(), fdata, mid_point_coeffs_nifti, mid_center_nifti)
     mid_slice, mid_mk = extract_slice(
-        ct_data, fdata, mid_point_coeffs_nifti, mid_center_nifti)
+        high_hu_img.get_fdata(), fdata, mid_point_coeffs_nifti, mid_center_nifti)
+    # mid_slice, mid_mk = extract_slice(
+    #     ct_data, fdata, mid_point_coeffs_nifti, mid_center_nifti)
     
     
     # 旋转180度
@@ -261,7 +262,7 @@ def process_single_ct(ct_path, base_dir, output_base_dir):
     print(f" {filename} 处理完成")    
 
 if __name__ == "__main__":
-    base_dir = "data"
+    base_dir = r"Z:\1.CY-SPACE\WuYaHe\0313_CT\NII\Severe_periodontitis\bucong"
     output_base_dir = base_dir  
     spacing = 0.3
     ct_dir = os.path.join(base_dir, "ct")

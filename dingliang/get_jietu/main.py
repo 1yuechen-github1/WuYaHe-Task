@@ -215,7 +215,7 @@ def process_single_ct(ct_path, base_dir, output_base_dir):
     print(f" {filename} 处理完成")        
 
 if __name__ == "__main__":
-    base_dir = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\test"
+    base_dir = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放"
     output_base_dir = base_dir  
     spacing = 0.3
     ct_dir = os.path.join(base_dir, "ct")

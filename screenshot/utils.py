@@ -609,37 +609,42 @@ def find_plane_intersection_line(plane1, plane2, ct_data,affine,header):
 
 
 
-# def save_slices_as_png(slices_data, slice_names, output_dir, patient_id):
+
+# def save_slices_as_png(slices_data, slices_mask, slice_names, output_dir, patient_id):
 #     os.makedirs(output_dir, exist_ok=True)
-#     for data, name in zip(slices_data, slice_names):
+#     for data, mask, name in zip(slices_data, slices_mask, slice_names):
 #         norm_data = ((data - data.min()) / (data.max() - data.min() + 1e-8) * 255).astype(np.uint8)
 #         rgb = np.stack([norm_data]*3, axis=-1)
-#         rgb[data == 3000] = [0, 255, 0]  # 绿色
-#         rgb[data == 2900] = [0, 183, 238]
+        
+#         mask_condition = (mask == 2) | (mask == 3)
+#         rgb[mask_condition] = [0, 0, 255]  # 蓝色
+#         rgb[mask == 0] = [0, 0, 0]
+#         rgb[data == 1000] = [0, 255, 0]  # 绿色
+#         rgb[(mask == 0) & (data == 1000)] = [0, 0, 0]
+#         plt.figure(facecolor='black')
 #         plt.imshow(rgb)
 #         plt.axis('off')
 #         plt.savefig(f"{output_dir}/{patient_id}_{name}.png", bbox_inches='tight', dpi=150)
 #         plt.close()
 
-
 def save_slices_as_png(slices_data, slices_mask, slice_names, output_dir, patient_id):
     os.makedirs(output_dir, exist_ok=True)
     for data, mask, name in zip(slices_data, slices_mask, slice_names):
-        norm_data = ((data - data.min()) / (data.max() - data.min() + 1e-8) * 255).astype(np.uint8)
+        data_clip = np.clip(data, 0, 1000)  # 防止异常值
+        norm_data = (data_clip / 1000 * 255).astype(np.uint8)
         rgb = np.stack([norm_data]*3, axis=-1)
-        
         mask_condition = (mask == 2) | (mask == 3)
-        # rgb[mask_condition] = [0, 0, 255]  # 蓝色
-        rgb[mask == 0] = [0, 0, 0]
-        # rgb[data == 3000] = [0, 255, 0]  # 绿色
-        rgb[(mask == 0) & (data == 3000)] = [0, 0, 0]
+        rgb[mask_condition] = [0, 0, 255]  # 蓝色
+        green_condition = (data == 3000)
+        rgb[green_condition] = [0, 255, 0]
+        other_condition = ~(mask_condition | green_condition)
+        # rgb[other_condition] = np.clip(rgb[other_condition] * 4.2, 0, 255).astype(np.uint8) # 增强其他区域的亮度
+        rgb[(mask == 0)] = [0, 0, 0]
         plt.figure(facecolor='black')
         plt.imshow(rgb)
         plt.axis('off')
         plt.savefig(f"{output_dir}/{patient_id}_{name}.png", bbox_inches='tight', dpi=150)
         plt.close()
-
-
 
 
 def nifti_to_pointcloud(

@@ -15,6 +15,39 @@ plt.rcParams['axes.unicode_minus'] = False
 from matplotlib.colors import LinearSegmentedColormap
 
 
+HOUYA_CMAP = LinearSegmentedColormap.from_list(
+    "houya_length_map",
+    [
+        (1.0, 0.0, 0.0),
+        (1.0, 0.75, 0.0),
+        (0.0, 1.0, 0.0),
+    ],
+    N=256,
+)
+
+
+def align_values_to_points(values, target_count):
+    values = np.asarray(values, dtype=float)
+    if target_count <= 0 or len(values) == 0:
+        return np.array([], dtype=float)
+    if len(values) == target_count:
+        return values
+    if len(values) == 1:
+        return np.full(target_count, values[0], dtype=float)
+
+    src_positions = np.arange(len(values), dtype=float)
+    dst_positions = np.linspace(0, len(values) - 1, target_count)
+    return np.interp(dst_positions, src_positions, values)
+
+
+def map_houya_length_to_color(length_value, min_value, max_value):
+    if np.isclose(max_value, min_value):
+        return np.array([1.0, 0.75, 0.0])
+    ratio = (length_value - min_value) / (max_value - min_value)
+    ratio = float(np.clip(ratio, 0.0, 1.0))
+    return np.array(HOUYA_CMAP(ratio)[:3])
+
+
 def process_single_ct(ct_path, base_dir, output_base_dir,txt_path):
     """
     处理单个CT文件的完整流程
@@ -28,10 +61,10 @@ def process_single_ct(ct_path, base_dir, output_base_dir,txt_path):
         return False
     output_dir = os.path.join(output_base_dir, "screenshot", 'qianya', filename)
     output_dir1 = os.path.join(output_base_dir, "screenshot", 'houya', filename)
-    os.makedirs(output_dir1, exist_ok=True)
-    os.makedirs(output_dir, exist_ok=True)
+    # os.makedirs(output_dir1, exist_ok=True)
+    # os.makedirs(output_dir, exist_ok=True)
     output_files_dir = os.path.join(base_dir, "output", filename)
-    os.makedirs(output_files_dir, exist_ok=True)
+    # os.makedirs(output_files_dir, exist_ok=True)
 
     ct_img = nib.load(ct_path)
     ct_data = ct_img.get_fdata()
@@ -191,7 +224,7 @@ def process_single_ct(ct_path, base_dir, output_base_dir,txt_path):
     houya_data = []
 
     # qianya_path = os.path.join(txt_path,'qianya','pca',filename,'len.txt')
-    houya_path = os.path.join(txt_path, 'PCA', filename, 'len.txt')
+    houya_path = os.path.join(txt_path, 'pca','houya', filename, 'len.txt')
     # with open(qianya_path, 'r')as f:
     #     for line in f:
     #         line = line.strip()
@@ -200,8 +233,9 @@ def process_single_ct(ct_path, base_dir, output_base_dir,txt_path):
     with open(houya_path, 'r')as f:
         for line in f:
             line = line.strip()
-            value = float(line.split(',')[-1])
-            houya_data.append(value)
+            # value = float(line.split(',')[-1])
+            value = float(line.split(',')[-1]) 
+            houya_data.append(value )
     # print('qianya_data:',qianya_data)
     # print('houya_data:',houya_data)
     counter = 0
@@ -212,67 +246,50 @@ def process_single_ct(ct_path, base_dir, output_base_dir,txt_path):
     print('开始输出后牙可视化')
     prev_plane = None
     prev_color = None
-    n_lines = len(houya_data)
-    colors = []
-    hy_data = np.sort(houya_data)
+    houya_points = filt_curve(houya_points, 0.2)
+    houya_data = align_values_to_points(houya_data, len(houya_points))
+    print(f"houya_points count: {len(houya_points)}, houya_data count: {len(houya_data)}")
+    if len(houya_data) == 0 or len(houya_points) == 0:
+        print(f"{filename} houya data or points is empty, skip coloring")
+        return False
 
-    for t in np.linspace(0, 1, n_lines):
-        if t < 0.5:
-            # 红 -> 黄
-            r = 1.0
-            g = t * 2
-            b = 0.0
-        else:
-            # 黄 -> 绿
-            r = 2 - t * 2
-            g = 1.0
-            b = 0.0
-
-        colors.append((r, g, b))
-
-    hy_max = np.max(hy_data)
-    hy_min = np.min(hy_data)
-    qianya_list2 = []
-    qianya_points = filt_curve(qianya_points, 0.2)
+    hy_max = np.max(houya_data)
+    hy_min = np.min(houya_data)
     for index, point in enumerate(qianya_points):
         plane_coeffs, _ = compute_shortest_distance_to_curve_with_perpendicular_plane(
             xiayuanxiang_path_data, point
         )
         pm_len = houya_data[index]
-        len_inde = np.where(hy_data == pm_len)[0][0]
-        # curr_color = colors[len_inde]
-        # curr_color = get_clo_list(pm_len,hy_min,hy_max)
-        curr_color = get_col(pm_len)
+        print(f"点 {index} 的骨长: {pm_len}")
+        curr_color = map_houya_length_to_color(pm_len, hy_min, hy_max)
         a, b, c, d = plane_coeffs
         n = np.array([a, b, c])
         dist = np.abs(xhg_points @ n + d) / np.linalg.norm(n)
         mask = dist < 0.3
 
         colors_all[mask] = curr_color
-        # if prev_plane is not None:
-        #     between_mask, blended = paint_between_planes(
-        #         xhg_points,
-        #         prev_plane,
-        #         plane_coeffs,
-        #         prev_color,
-        #         curr_color
-        #     )
-        #     if blended is not None:
-        #         colors_all[between_mask] = blended
-        # prev_plane = plane_coeffs
-        # prev_color = curr_color
-        qianya_data1 = np.hstack([point,pm_len])
-        qianya_list2.append(qianya_data1)
+        if prev_plane is not None:
+            between_mask, blended = paint_between_planes(
+                xhg_points,
+                prev_plane,
+                plane_coeffs,
+                prev_color,
+                curr_color
+            )
+            if blended is not None:
+                colors_all[between_mask] = blended
+        prev_plane = plane_coeffs
+        prev_color = curr_color
 
     gray_color = np.array([0.7, 0.7, 0.7])
-    mask_gray = (xhg_points[:, 1] < left_z_centroid[1]) | (xhg_points[:, 1] < left_z_centroid[1])
+    gray_threshold = min(left_z_centroid[1], right_z_centroid[1])
+    mask_gray = xhg_points[:, 1] < gray_threshold
     # 强制设置为灰色
     colors_all[mask_gray] = gray_color
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(xhg_points)
     pcd.colors = o3d.utility.Vector3dVector(colors_all)
     o3d.visualization.draw_geometries([pcd],width=800, height=600)
-
     colors_255 = (colors_all * 255).astype(np.uint8)
     fina_xhg = np.hstack([xhg_points,colors_255])
     os.makedirs(os.path.join(txt_path, 'vis'),exist_ok=True)
@@ -282,7 +299,7 @@ def process_single_ct(ct_path, base_dir, output_base_dir,txt_path):
 
 if __name__ == "__main__":
     base_dir = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放"
-    txt_path = r'C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\PCA'
+    txt_path = r'C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot'
     output_base_dir = base_dir
     spacing = 0.3
     ct_dir = os.path.join(base_dir, "ct")

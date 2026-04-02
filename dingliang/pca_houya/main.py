@@ -1,3 +1,5 @@
+from importlib.metadata import files
+
 from networkx import center
 import cv2
 import numpy as np
@@ -5,16 +7,30 @@ import matplotlib.pyplot as plt
 import os
 from PIL import Image
 from utils import *  
-
+import re
 # 主程序
 if __name__ == "__main__":
-    inp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\PCA\IMG"
-    outp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\PCA\PCA"
+
+    # 1.距离下颌管上缘2mm处做水平线
+    # 2.垂直于长轴在上方做宽:度为6mm的绿线
+    # 3.获取水平线与长轴交点和绿线间的距离a
+    # 4.长轴方向上最远点与绿线间的距离b
+
+    inp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\origin\img"
+    outp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\pca\houya"
     os.makedirs(outp, exist_ok=True)
     os.makedirs(outp, exist_ok=True)
     total_files = 0
     success_files = 0
-    for file in os.listdir(inp):
+    # files = os.listdir(inp)
+    # files = [file for file in  os.listdir(inp) if file.endswith('.png')]
+    # files = np.sort(files)
+    files = sorted(
+    [f for f in os.listdir(inp) if f.endswith('.png')],
+    key=lambda x: int(re.search(r'slice_(\d+)', x).group(1))
+    )
+    for file in files:
+        print(f"Processing file: {file}")
         ext = os.path.splitext(file)[1].lower()
         total_files += 1
         inp_file = os.path.join(inp, file)
@@ -29,7 +45,7 @@ if __name__ == "__main__":
         # pca 牙体长轴
         res= extract_tooth_long_axis(img, outp_file,file)
         if res:   
-            rot_img,p1_rot,p2_rot,center_rot,vis = res
+            rot_img,p1_rot,p2_rot,center_rot,vis,_ = res
             vis1 = cv2.cvtColor(rot_img, cv2.COLOR_GRAY2BGR) 
             wid, heigh = rot_img.shape[1], rot_img.shape[0]
             # 5 + 7 = 12

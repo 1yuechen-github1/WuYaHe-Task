@@ -228,6 +228,6 @@ def extract_tooth_long_axis(
         # print(p1_rot, p2_rot)
         p1, p2 = cacul_xy(p1_rot, p2_rot, rot_img)
 
-        return rot_img, p1, p2, center_mean, vis
+        return rot_img, p1, p2, center_mean, vis, blue_points
 
   

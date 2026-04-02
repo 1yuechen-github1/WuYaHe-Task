@@ -28,10 +28,10 @@ def process_single_ct(ct_path, base_dir, output_base_dir,txt_path):
         return False
     output_dir = os.path.join(output_base_dir, "screenshot", 'qianya', filename)
     output_dir1 = os.path.join(output_base_dir, "screenshot", 'houya', filename)
-    os.makedirs(output_dir1, exist_ok=True)
-    os.makedirs(output_dir, exist_ok=True)
+    # os.makedirs(output_dir1, exist_ok=True)
+    # os.makedirs(output_dir, exist_ok=True)
     output_files_dir = os.path.join(base_dir, "output", filename)
-    os.makedirs(output_files_dir, exist_ok=True)
+    # os.makedirs(output_files_dir, exist_ok=True)
 
     ct_img = nib.load(ct_path)
     ct_data = ct_img.get_fdata()
@@ -191,7 +191,7 @@ def process_single_ct(ct_path, base_dir, output_base_dir,txt_path):
     houya_data = []
 
     # qianya_path = os.path.join(txt_path,'qianya','pca',filename,'len.txt')
-    houya_path = os.path.join(txt_path, 'pca-houya', filename, 'len.txt')
+    houya_path = os.path.join(txt_path, 'pca','houya', filename, 'len.txt')
     # with open(qianya_path, 'r')as f:
     #     for line in f:
     #         line = line.strip()
@@ -200,8 +200,9 @@ def process_single_ct(ct_path, base_dir, output_base_dir,txt_path):
     with open(houya_path, 'r')as f:
         for line in f:
             line = line.strip()
-            value = float(line.split(',')[-1])
-            houya_data.append(value)
+            # value = float(line.split(',')[-1])
+            value = float(line.split(',')[-1]) 
+            houya_data.append(value )
     # print('qianya_data:',qianya_data)
     # print('houya_data:',houya_data)
     counter = 0
@@ -215,29 +216,19 @@ def process_single_ct(ct_path, base_dir, output_base_dir,txt_path):
     n_lines = len(houya_data)
     colors = []
     hy_data = np.sort(houya_data)
-    for t in np.linspace(0, 1, n_lines):
-        if t < 0.5:
-            # 红 -> 黄
-            r = 1.0
-            g = t * 2
-            b = 0.0
-        else:
-            # 黄 -> 绿
-            r = 2 - t * 2
-            g = 1.0
-            b = 0.0
 
-        colors.append((r, g, b))
 
     hy_max = np.max(hy_data)
     hy_min = np.min(hy_data)
-    print('houya_data:',houya_data)
+    # print('houya_data:',houya_data)
+    qianya_points = filt_curve(qianya_points, 0.2)
     for index, point in enumerate(qianya_points):
         plane_coeffs, _ = compute_shortest_distance_to_curve_with_perpendicular_plane(
             xiayuanxiang_path_data, point
         )
         pm_len = houya_data[index]
-        len_inde = np.where(hy_data == pm_len)[0][0]
+        print(f"点 {index} 的骨长: {pm_len}")
+        # len_inde = np.where(hy_data == pm_len)[0][0]
         # curr_color = colors[len_inde]
         curr_color = get_clo_list(pm_len,hy_min,hy_max)
         a, b, c, d = plane_coeffs
@@ -276,7 +267,7 @@ def process_single_ct(ct_path, base_dir, output_base_dir,txt_path):
 
 if __name__ == "__main__":
     base_dir = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放"
-    txt_path = r'C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\pca-sum'
+    txt_path = r'C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot'
     output_base_dir = base_dir
     spacing = 0.3
     ct_dir = os.path.join(base_dir, "ct")
