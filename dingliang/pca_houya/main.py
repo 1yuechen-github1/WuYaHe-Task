@@ -1,92 +1,145 @@
-from importlib.metadata import files
-
-from networkx import center
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
 import os
 from PIL import Image
-from utils import *  
+from utils import *
 import re
-# 主程序
-if __name__ == "__main__":
 
-    # 1.距离下颌管上缘2mm处做水平线
-    # 2.垂直于长轴在上方做宽:度为6mm的绿线
-    # 3.获取水平线与长轴交点和绿线间的距离a
-    # 4.长轴方向上最远点与绿线间的距离b
+
+PIXEL_SPACING_MM = 0.3
+dot_radius = 3
+
+
+if __name__ == "__main__":
+    # 1. 蓝色虚线位于颏孔上界，垂直于长轴
+    # 2. 蓝色虚线向上平移 2mm 得到蓝色实线，垂直于长轴
+    # 3. 蓝色实线继续向上平移，找到 mask>0 区域长度约为 7mm 的绿色实线，垂直于长轴
+    # 4. 绿色实线继续向上平移，找到与 mask 上边界相切的绿色虚线，垂直于长轴
+    # 5. 计算蓝色实线与绿色实线之间的距离 a
+    # 6. 计算绿色实线与绿色虚线之间的距离 b
 
     inp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\origin\img"
     outp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\pca\houya"
+
     os.makedirs(outp, exist_ok=True)
-    os.makedirs(outp, exist_ok=True)
+
     total_files = 0
     success_files = 0
-    # files = os.listdir(inp)
-    # files = [file for file in  os.listdir(inp) if file.endswith('.png')]
-    # files = np.sort(files)
     files = sorted(
-    [f for f in os.listdir(inp) if f.endswith('.png')],
-    key=lambda x: int(re.search(r'slice_(\d+)', x).group(1))
+        [f for f in os.listdir(inp) if f.endswith(".png")],
+        key=lambda x: int(re.search(r"slice_(\d+)", x).group(1)),
     )
+
     for file in files:
         print(f"Processing file: {file}")
         ext = os.path.splitext(file)[1].lower()
         total_files += 1
         inp_file = os.path.join(inp, file)
-        
+
         name, ext_orig = os.path.splitext(file)
-        # outp_file = os.path.join(outp, f"{name}{ext_orig}")
         prex = file.split(".")[0]
         prex = prex.split("_")[0]
-        os.makedirs(os.path.join(outp,prex), exist_ok=True)
-        outp_file = os.path.join(outp,prex, f"{name}{ext_orig}")
+        os.makedirs(os.path.join(outp, prex), exist_ok=True)
+        outp_file = os.path.join(outp, prex, f"{name}{ext_orig}")
+
         img = Image.open(inp_file)
-        # pca 牙体长轴
-        res= extract_tooth_long_axis(img, outp_file,file)
-        if res:   
-            rot_img,p1_rot,p2_rot,center_rot,vis,_ = res
-            vis1 = cv2.cvtColor(rot_img, cv2.COLOR_GRAY2BGR) 
-            wid, heigh = rot_img.shape[1], rot_img.shape[0]
-            # 5 + 7 = 12
-            index = center_rot[1] - 12
-            closest_point,min_y_point,_,_= cacul_y_by_x(p1_rot, p2_rot, rot_img,index)
-            min_y_point1,max_y_point1 = get_axios1(rot_img,p1_rot,p2_rot)
-            top_min, top_max = get_top_poin(rot_img, p1_rot, p2_rot)
-            if index is not None:
-                sta,end = cacul_x(index,rot_img)
-                cv2.line(vis1, (sta, index), (end, index), (35, 147, 66), 1) # 2mm绿线
-                cv2.line(vis1, closest_point, min_y_point, (35, 147, 66), 1) # 垂直长轴的绿线 下
-                cv2.line(vis1, max_y_point1, min_y_point1, (35, 147, 66), 1) # 垂直长轴的绿线 上
-                # cv2.circle(vis1, top_max, (35, 147, 66), 1, 3)
-                # cv2.circle(vis1, tuple(top_max), 2, (255, 0, 0), -1)
+        rot_img, p1_rot, p2_rot, center_rot, vis, blue_points = extract_tooth_long_axis(img, outp_file, file, offset=10)
+        # if not res:
+        #     continue
 
-            ys, xs = np.where(rot_img > 0) 
-            points = np.array(list(zip(xs, ys)))
-            red_len = np.sqrt((closest_point[0] - min_y_point[0]) ** 2 + (closest_point[1] - min_y_point[1]) ** 2)
-            red_len1 = (max_y_point1[0] - top_max[0]) ** 2 + (max_y_point1[1] - top_max[1]) ** 2
+        # rot_img, p1_rot, p2_rot, center_rot, vis, blue_points = res
+        vis1 = cv2.cvtColor(rot_img, cv2.COLOR_GRAY2BGR)
 
-            print(p1_rot[1],p2_rot[1],index)
-            # with open(f"{outp}" + '\len.txt', 'a') as f:
-            with open(f"{outp}\\{prex}" + '\len.txt', 'a') as f:
-                f.write(f"{file},{red_len * 0.3}\n")
-            cv2.line(vis1, tuple(p1_rot), tuple(p2_rot), (0, 0, 255), 3)
-            cv2.circle(vis1, tuple(center_rot), 5, (255, 0, 0), -1)
-            cv2.putText(
-                vis1,
-                text=f'a = {red_len * 0.3:.2f}mm',
-                org=(50, 50),
-                fontFace=cv2.FONT_HERSHEY_SIMPLEX,
-                fontScale=1,
-                color=(0, 0, 255),
-                thickness=2,
-                lineType=cv2.LINE_AA
+        offset_2mm_px = mm_to_px(2.0)
+        target_width_px = mm_to_px(7.0)
+
+        # 蓝色区域上界作为第一条蓝色虚线的参考位置
+        if len(blue_points) > 0:
+            blue_top_index = int(np.round(np.min(blue_points[:, 1])))
+        else:
+            blue_top_index = int(center_rot[1])
+            
+
+        blue_top_index = int(np.clip(blue_top_index, 0, rot_img.shape[0] ))
+        blue_dashed_line = get_perp_line_at_index(rot_img, p1_rot, p2_rot, blue_top_index)
+        if blue_dashed_line is None:
+            print(f"{file}: 未找到蓝色虚线")
+            continue
+
+        # 蓝色虚线向上平移 2mm，得到蓝色实线
+        blue_solid_index = max(0, blue_top_index - offset_2mm_px)
+        blue_solid_line = get_perp_line_at_index(rot_img, p1_rot, p2_rot, blue_solid_index)
+        if blue_solid_line is None:
+            print(f"{file}: 未找到蓝色实线")
+            continue
+
+        # 继续向上搜索，找到长度最接近 7mm 的绿色实线
+        green_solid_line = find_best_width_perp_line(
+            rot_img, p1_rot, p2_rot, blue_solid_index, target_width_px
+        )
+        if green_solid_line is None:
+            print(f"{file}: 未找到满足条件的 7mm 绿色实线")
+            continue
+
+        # 在绿色实线上方继续找与 rot_img>0 只有一个像素交点的绿色虚线
+        green_dashed_line = find_upper_tangent_perp_line(
+            rot_img, p1_rot, p2_rot, green_solid_line["index"]
+        )
+        if green_dashed_line is None:
+            print(f"{file}: 未找到仅有一个像素交点的绿色虚线")
+            continue
+
+        # 绘制四条关键参考线
+        draw_line_by_style(vis1, blue_dashed_line, (255, 0, 0), dashed=True, thickness=1)
+        draw_line_by_style(vis1, blue_solid_line, (255, 0, 0), dashed=False, thickness=1)
+        draw_line_by_style(vis1, green_solid_line, (0, 255, 0), dashed=False, thickness=1)
+        draw_line_by_style(vis1, green_dashed_line, (0, 255, 0), dashed=True, thickness=1)
+
+        # a 是蓝色实线到绿色实线在长轴方向上的距离
+        a_len = (
+            np.linalg.norm(
+                np.array(blue_solid_line["closest_point"]) - np.array(green_solid_line["closest_point"])
+            )
+            * PIXEL_SPACING_MM
+        )
+        # b 是绿色实线到绿色虚线在长轴方向上的距离
+        b_len = (
+            np.linalg.norm(
+                np.array(green_solid_line["closest_point"]) - np.array(green_dashed_line["closest_point"])
+            )
+            * PIXEL_SPACING_MM
+        )
+
+        with open(f"{outp}\\{prex}" + "\\len.txt", "a") as f:
+            f.write(
+                f"{file},a={a_len:.2f},b={b_len:.2f},green_width={green_solid_line['length_px'] * PIXEL_SPACING_MM:.2f}\n"
             )
 
-            # cv2.imshow("vis1",vis1)
-            # cv2.waitKey(3000)            
-            cv2.imencode('.jpg', vis1)[1].tofile(outp_file.replace(ext_orig,'.jpg'))
+        cv2.line(vis1, tuple(p1_rot), tuple(p2_rot), (0, 0, 255), 3)
+        cv2.circle(vis1, tuple(center_rot), dot_radius, (255, 0, 0), -1)
+        cv2.circle(vis1, blue_solid_line["closest_point"], dot_radius, (255, 0, 0), -1)
+        cv2.circle(vis1, green_solid_line["closest_point"], dot_radius, (0, 255, 0), -1)
 
-        
+        cv2.putText(
+            vis1,
+            text=f"a = {a_len:.2f}mm",
+            org=(50, 50),
+            fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+            fontScale=1,
+            color=(255, 0, 0),
+            thickness=2,
+            lineType=cv2.LINE_AA,
+        )
+        cv2.putText(
+            vis1,
+            text=f"b = {b_len:.2f}mm",
+            org=(50, 95),
+            fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+            fontScale=1,
+            color=(0, 255, 0),
+            thickness=2,
+            lineType=cv2.LINE_AA,
+        )
 
-
+        cv2.imencode(".jpg", vis1)[1].tofile(outp_file.replace(ext_orig, ".jpg"))
+        success_files += 1
