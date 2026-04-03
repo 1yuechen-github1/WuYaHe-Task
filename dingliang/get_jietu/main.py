@@ -13,6 +13,11 @@ from scipy.ndimage import zoom
 plt.rcParams['font.sans-serif'] = ['SimHei']  
 plt.rcParams['axes.unicode_minus'] = False  
 
+WINDOW_CENTER = 1000
+WINDOW_WIDTH = 4000
+MIP_WINDOW_CENTER = 1500
+MIP_WINDOW_WIDTH = 1700
+
 def process_single_ct(ct_path, base_dir, output_base_dir):
     """
     处理单个CT文件的完整流程
@@ -26,8 +31,10 @@ def process_single_ct(ct_path, base_dir, output_base_dir):
         return False
     output_dir = os.path.join(output_base_dir, "screenshot",'houya',filename)
     output_dir1 = os.path.join(output_base_dir, "screenshot",'qianya',filename)
+    output_dir2 = os.path.join(output_base_dir, "screenshot",'kekong',filename)
     os.makedirs(output_dir1, exist_ok=True)
     os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(output_dir2, exist_ok=True)
     output_files_dir = os.path.join(base_dir, "output", filename)
     os.makedirs(output_files_dir, exist_ok=True)
 
@@ -154,7 +161,9 @@ def process_single_ct(ct_path, base_dir, output_base_dir):
         inde_lsta, inde_lend = get_star_end(lkq_midpoint, yagong_filt_xl, lmax_midpoint)
 
     maskl = np.ones(len(yagong_filt_xl), dtype=bool)
-    maskl = maskl & ~((yagong_filt_xl[:, 0] > yagong_filt_xl[inde_lsta, 0]) &(yagong_filt_xl[:, 0] < yagong_filt_xl[inde_lend, 0]))
+    kekong_maskl = (yagong_filt_xl[:, 0] > yagong_filt_xl[inde_lsta, 0]) & (yagong_filt_xl[:, 0] < yagong_filt_xl[inde_lend, 0])
+    maskl = maskl & ~kekong_maskl
+    kekong_points_l = yagong_filt_xl[kekong_maskl]
     yagong_filt_xl = yagong_filt_xl[maskl]
 
     if rmax_midpoint[0] > rkq_midpoint[0]:
@@ -162,7 +171,9 @@ def process_single_ct(ct_path, base_dir, output_base_dir):
     else:
         inde_rsta, inde_rend = get_star_end(rkq_midpoint, yagong_filt_xr, rmax_midpoint)
     maskr = np.ones(len(yagong_filt_xr), dtype=bool)
-    maskr = maskr & ~((yagong_filt_xr[:, 0] > yagong_filt_xr[inde_rsta, 0]) &(yagong_filt_xr[:, 0] < yagong_filt_xr[inde_rend, 0]))
+    kekong_maskr = (yagong_filt_xr[:, 0] > yagong_filt_xr[inde_rsta, 0]) & (yagong_filt_xr[:, 0] < yagong_filt_xr[inde_rend, 0])
+    maskr = maskr & ~kekong_maskr
+    kekong_points_r = yagong_filt_xr[kekong_maskr]
     yagong_filt_xr = yagong_filt_xr[maskr]
 
     if lmax_midpoint[0] > lkq_midpoint[0]:
@@ -185,6 +196,7 @@ def process_single_ct(ct_path, base_dir, output_base_dir):
     qianya_points_l = yagong_filt_xl[qianya_maskl]
     qianya_points = np.vstack([houya_points_l, qianya_points_r])
     houya_points = np.vstack([qianya_points_l, houya_points_r])
+    kekong_points = np.concatenate([kekong_points_l, kekong_points_r], axis=0)
 
     counter = 0
     qianya_points = filt_curve(qianya_points, 0.2)
@@ -197,7 +209,17 @@ def process_single_ct(ct_path, base_dir, output_base_dir):
         
         mid_slice,mid_mk = extract_slice(
         ct_data, fdata, plane_coeffs, closest_point,index, len(qianya_points))  
-        save_slices_as_png(mid_slice,mid_mk ,f"slice_{index}", output_dir, patient_id=filename)
+        save_slices_as_png(
+            mid_slice,
+            mid_mk,
+            f"slice_{index}",
+            output_dir,
+            patient_id=filename,
+            window_center=WINDOW_CENTER,
+            window_width=WINDOW_WIDTH,
+            mip_window_center=MIP_WINDOW_CENTER,
+            mip_window_width=MIP_WINDOW_WIDTH,
+        )
     counter = len(qianya_points)
 
     houya_points = filt_curve(houya_points, 0.2)
@@ -210,7 +232,40 @@ def process_single_ct(ct_path, base_dir, output_base_dir):
 
         mid_slice,mid_mk = extract_slice(
         ct_data, fdata, plane_coeffs, closest_point,index, len(houya_points))
-        save_slices_as_png(mid_slice,mid_mk ,f"slice_{counter + index}", output_dir1, patient_id=filename)
+        save_slices_as_png(
+            mid_slice,
+            mid_mk,
+            f"slice_{counter + index}",
+            output_dir1,
+            patient_id=filename,
+            window_center=WINDOW_CENTER,
+            window_width=WINDOW_WIDTH,
+            mip_window_center=MIP_WINDOW_CENTER,
+            mip_window_width=MIP_WINDOW_WIDTH,
+        )
+
+    if len(kekong_points) > 0:
+        kekong_points = filt_curve(kekong_points, 0.2)
+        for index, point in enumerate(kekong_points):
+            plane_coeffs, closest_point = compute_shortest_distance_to_curve_with_perpendicular_plane(
+             xiayuanxiang_path_data, point
+            )
+            plane_coeffs, closest_point = trans_to_nifti(
+            plane_coeffs, closest_point, ct_img, affine)
+
+            mid_slice,mid_mk = extract_slice(
+            ct_data, fdata, plane_coeffs, closest_point,index, len(kekong_points))
+            save_slices_as_png(
+                mid_slice,
+                mid_mk,
+                f"slice_{index}",
+                output_dir2,
+                patient_id=filename,
+                window_center=WINDOW_CENTER,
+                window_width=WINDOW_WIDTH,
+                mip_window_center=MIP_WINDOW_CENTER,
+                mip_window_width=MIP_WINDOW_WIDTH,
+            )
  
     print(f" {filename} 处理完成")        
 

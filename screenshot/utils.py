@@ -19,7 +19,7 @@ from scipy.interpolate import splprep, splev
 import matplotlib.pyplot as plt
 import scipy.ndimage as ndimage
 from scipy.ndimage import label
-
+from PIL import Image
 
 def create_plane_from_three_points(p1, p2, p3):
     """
@@ -627,24 +627,76 @@ def find_plane_intersection_line(plane1, plane2, ct_data,affine,header):
 #         plt.savefig(f"{output_dir}/{patient_id}_{name}.png", bbox_inches='tight', dpi=150)
 #         plt.close()
 
-def save_slices_as_png(slices_data, slices_mask, slice_names, output_dir, patient_id):
+# def save_slices_as_png(slices_data, slices_mask, slice_names, output_dir, patient_id):
+    # os.makedirs(output_dir, exist_ok=True)
+    # for data, mask, name in zip(slices_data, slices_mask, slice_names):
+    #     data_clip = np.clip(data, 0, 1000)  # 防止异常值
+    #     norm_data = (data_clip / 1000 * 255).astype(np.uint8)
+    #     rgb = np.stack([norm_data]*3, axis=-1)
+    #     mask_condition = (mask == 2) | (mask == 3)
+    #     rgb[mask_condition] = [0, 0, 255]  # 蓝色
+    #     green_condition = (data == 3000)
+    #     rgb[green_condition] = [0, 255, 0]
+    #     other_condition = ~(mask_condition | green_condition)
+    #     # rgb[other_condition] = np.clip(rgb[other_condition] * 4.2, 0, 255).astype(np.uint8) # 增强其他区域的亮度
+    #     rgb[(mask == 0)] = [0, 0, 0]
+    #     plt.figure(facecolor='black')
+    #     plt.imshow(rgb)
+    #     plt.axis('off')
+    #     plt.savefig(f"{output_dir}/{patient_id}_{name}.png", bbox_inches='tight', dpi=150)
+    #     plt.close()
+
+def save_slices_as_png(
+    slices_data,
+    slices_mask,
+    slice_names,
+    output_dir,
+    patient_id,
+    window_center=1000,
+    window_width=4000,
+    mip_window_center=1500,
+    mip_window_width=1700,
+    use_mip_window=False,
+):
     os.makedirs(output_dir, exist_ok=True)
+
+    current_center = mip_window_center if use_mip_window else window_center
+    current_width = mip_window_width if use_mip_window else window_width
+    window_min = current_center - current_width / 2.0
+    window_max = current_center + current_width / 2.0
+
+    output_paths = []
+
+    # ⭐ 核心：循环处理每一个 slice
     for data, mask, name in zip(slices_data, slices_mask, slice_names):
-        data_clip = np.clip(data, 0, 1000)  # 防止异常值
-        norm_data = (data_clip / 1000 * 255).astype(np.uint8)
+
+        # 1️⃣ window
+        data_clip = np.clip(data, window_min, window_max)
+        norm_data = ((data_clip - window_min) / (window_max - window_min + 1e-8) * 255).astype(np.uint8)
+
+        # 2️⃣ 灰度 → RGB
         rgb = np.stack([norm_data]*3, axis=-1)
+
+        # 3️⃣ mask 上色
         mask_condition = (mask == 2) | (mask == 3)
         rgb[mask_condition] = [0, 0, 255]  # 蓝色
+
+        rgb[mask == 0] = [0, 0, 0]
+        # rgb[green_condition] = [0, 255, 0]
         green_condition = (data == 3000)
         rgb[green_condition] = [0, 255, 0]
-        other_condition = ~(mask_condition | green_condition)
-        # rgb[other_condition] = np.clip(rgb[other_condition] * 4.2, 0, 255).astype(np.uint8) # 增强其他区域的亮度
-        rgb[(mask == 0)] = [0, 0, 0]
-        plt.figure(facecolor='black')
-        plt.imshow(rgb)
-        plt.axis('off')
-        plt.savefig(f"{output_dir}/{patient_id}_{name}.png", bbox_inches='tight', dpi=150)
-        plt.close()
+        # 可选逻辑（你原来的）
+        rgb[(mask == 0) & (data == 3000)] = [0, 0, 0]
+
+        # 4️⃣ 保存
+        img = Image.fromarray(rgb, 'RGB')
+        output_path = os.path.join(output_dir, f"{patient_id}_{name}.png")
+        img.save(output_path)
+
+        output_paths.append(output_path)
+
+    return output_paths
+
 
 
 def nifti_to_pointcloud(

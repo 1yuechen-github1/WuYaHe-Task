@@ -451,9 +451,26 @@ def find_plane_intersection_line(plane1, plane2, ct_data,affine,header):
     vol = draw_line_3d(p1, p2, vol)
     nii_vol = nib.Nifti1Image(vol, affine, header)
     return nii_vol
-def save_slices_as_png(slices_data, slices_mask, slice_names, output_dir, patient_id):
+
+def save_slices_as_png(
+    slices_data,
+    slices_mask,
+    slice_names,
+    output_dir,
+    patient_id,
+    window_center=1000,
+    window_width=4000,
+    mip_window_center=1500,
+    mip_window_width=1700,
+    use_mip_window=False,
+):
     os.makedirs(output_dir, exist_ok=True)
-    norm_data = ((slices_data - slices_data.min()) / (slices_data.max() - slices_data.min() + 1e-8) * 255).astype(np.uint8)
+    current_center = mip_window_center if use_mip_window else window_center
+    current_width = mip_window_width if use_mip_window else window_width
+    window_min = current_center - current_width / 2.0
+    window_max = current_center + current_width / 2.0
+    data_clip = np.clip(slices_data, window_min, window_max)
+    norm_data = ((data_clip - window_min) / (window_max - window_min + 1e-8) * 255).astype(np.uint8)
     rgb = np.zeros((*slices_data.shape, 3), dtype=np.uint8)
     for i in range(3):
         rgb[:, :, i] = norm_data

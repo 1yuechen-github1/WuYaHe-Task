@@ -13,6 +13,13 @@ from scipy.ndimage import zoom
 plt.rcParams['font.sans-serif'] = ['SimHei']  
 plt.rcParams['axes.unicode_minus'] = False  
 
+
+WINDOW_CENTER = 1000
+WINDOW_WIDTH = 4000
+MIP_WINDOW_CENTER = 1500
+MIP_WINDOW_WIDTH = 1700
+
+
 def process_single_ct(ct_path, base_dir, output_base_dir):
     """
     处理单个CT文件的完整流程
@@ -258,11 +265,22 @@ def process_single_ct(ct_path, base_dir, output_base_dir):
     slices_data = [ left_mid_slice, right_mid_slice, left_xiahekong_slice, right_xiahekong_slice,mid_slice]
     slices_mask = [left_mid_mk,right_mid_mk,left_xiahekong_mk,right_xiahekong_mk,mid_mk]
     slice_names = [ '左侧中间截面', '右侧中间截面', '左侧颏孔截面', '右侧颏孔截面','中间截面']        
-    save_slices_as_png(slices_data,slices_mask ,slice_names, output_dir, patient_id=filename)    
+    # save_slices_as_png(slices_data,slices_mask ,slice_names, output_dir, patient_id=filename)    
+    save_slices_as_png(
+    slices_data,
+    slices_mask,
+    slice_names,
+    output_dir,
+    patient_id=filename,
+    window_center=WINDOW_CENTER,
+    window_width=WINDOW_WIDTH,
+    mip_window_center=MIP_WINDOW_CENTER,
+    mip_window_width=MIP_WINDOW_WIDTH,
+    )
     print(f" {filename} 处理完成")    
 
 if __name__ == "__main__":
-    base_dir = r"Z:\1.CY-SPACE\WuYaHe\0313_CT\NII\Severe_periodontitis\bucong"
+    base_dir = r"Y:\1.CY-SPACE\WuYaHe\0313_CT\NII\Severe_periodontitis"
     output_base_dir = base_dir  
     spacing = 0.3
     ct_dir = os.path.join(base_dir, "ct")

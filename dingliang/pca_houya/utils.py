@@ -189,6 +189,71 @@ def pil_imwrite(img_path, img):
         return False
 
 
+# def extract_tooth_long_axis(
+#     img_pil,
+#     output_path,
+#     filename,
+#     bin_thresh=40,
+#     kernel_size=5,
+#     axis_len_scale=1.2,
+#     offset=10,
+# ):
+#     img = np.array(img_pil)
+#     blue_mask = (img[:, :, 0] == 0) & (img[:, :, 1] == 0) & (img[:, :, 2] == 255)
+#     blue_points = np.column_stack(np.where(blue_mask))
+
+#     if img_pil.mode != "L":
+#         img_gray_pil = img_pil.convert("L")
+#         img = np.array(img_gray_pil)
+#     h, w = img.shape
+#     _, mask = cv2.threshold(img, bin_thresh, 255, cv2.THRESH_BINARY)
+#     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+#     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel, iterations=2)
+#     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+#     if not contours:
+#         return
+#     tooth_cnt = max(contours, key=cv2.contourArea)
+#     pts = tooth_cnt.reshape(-1, 2).astype(np.float64)
+#     center = pts.mean(axis=0)
+#     if len(pts) < 3:
+#         print(filename, "轮廓点太少，无法计算长轴")
+#         return None
+
+#     cov = np.cov((pts - center).T)
+#     eigvals, eigvecs = np.linalg.eig(cov)
+#     axis = eigvecs[:, np.argmax(eigvals)]
+#     axis = axis / np.linalg.norm(axis)
+#     L = max(h, w) * axis_len_scale
+#     p1 = (center - axis * L).astype(int)
+#     p2 = (center + axis * L).astype(int)
+#     angle_axis = np.degrees(np.arctan2(axis[1], axis[0]))
+#     rotate_angle = angle_axis + 60.0
+#     center_pt = (int(center[0]), int(center[1]))
+
+#     M = cv2.getRotationMatrix2D(center_pt, rotate_angle, 1.0)
+#     rot_img = cv2.warpAffine(img, M, (w, h))
+#     p1_rot = rotate_point(p1, M)
+#     p2_rot = rotate_point(p2, M)
+
+#     blue_points = np.column_stack([blue_points[:, 1], blue_points[:, 0]])
+#     blue_points = rotate_points(blue_points, M)
+#     center_rot = rotate_point(center, M)
+
+#     vis = cv2.cvtColor(rot_img, cv2.COLOR_GRAY2BGR)
+#     center_int = (int(center_rot[0]), int(center_rot[1]))
+#     if len(blue_points) != 0:
+#         center_mean = np.mean(blue_points, axis=0)
+#         center_x = int(round(center_mean[0]))
+#         center_y = int(round(center_mean[1]))
+#         center_mean = (center_x, center_y)
+#     else:
+#         center_mean = center_int
+
+#     p1, p2 = cacul_xy(p1_rot, p2_rot, rot_img, offset=offset)
+
+#     return rot_img, p1, p2 , center_mean, vis, blue_points
+
+
 def extract_tooth_long_axis(
     img_pil,
     output_path,
@@ -326,6 +391,96 @@ def get_perp_line_at_index(rot_img, p1_rot, p2_rot, index):
         "length_px": float(length),
     }
 
+def get_index_perp_line(rot_img, p1_rot, p2_rot, index, blue_points, max_search=200):
+    """
+    从 index 开始向上搜索，找到与 blue_points 交点数 < 4 的垂线，
+    并确保再往上两条线交点 < 2 才返回
+    
+    Args:
+        rot_img: 旋转后的图
+        p1_rot, p2_rot: 长轴两点
+        index: 起始 x
+        blue_points: (N,2) 的 (x,y)
+        max_search: 最多向上搜索多少像素
+        
+    Returns:
+        dict or None
+    """
+    h = rot_img.shape[0]
+    blue_points = blue_points.astype(int)
+    blue_set = set((int(x), int(y)) for x, y in blue_points)
+
+    for offset in range(max_search):
+        cur_index = index - offset
+        if cur_index < 0:
+            break
+
+        try:
+            closest_point, min_y_point, max_y_point, _ = cacul_y_by_x(
+                p1_rot, p2_rot, rot_img, cur_index
+            )
+        except Exception:
+            continue
+
+        length = np.linalg.norm(np.array(max_y_point) - np.array(min_y_point))
+        if length <= 0:
+            continue
+
+        x0, y0 = map(int, min_y_point)
+        x1, y1 = map(int, max_y_point)
+        num = int(length)
+        xs = np.linspace(x0, x1, num).astype(int)
+        ys = np.linspace(y0, y1, num).astype(int)
+
+        intersect_count = 0
+        for x, y in zip(xs, ys):
+            if (x, y) in blue_set:
+                intersect_count += 1
+                if intersect_count >= 5:  # 大于等于5就不用算了
+                    break
+
+        # 主条件：交点小于4
+        if intersect_count < 4:
+            # 再往上检查2条线
+            meets_condition = True
+            for next_offset in range(1, 3):  # +1, +2
+                next_index = cur_index - next_offset
+                if next_index < 0:
+                    break
+                try:
+                    _, min_y_point_n, max_y_point_n, _ = cacul_y_by_x(
+                        p1_rot, p2_rot, rot_img, next_index
+                    )
+                except Exception:
+                    continue
+
+                length_n = np.linalg.norm(np.array(max_y_point_n) - np.array(min_y_point_n))
+                if length_n <= 0:
+                    continue
+
+                x0_n, y0_n = map(int, min_y_point_n)
+                x1_n, y1_n = map(int, max_y_point_n)
+                num_n = int(length_n)
+                xs_n = np.linspace(x0_n, x1_n, num_n).astype(int)
+                ys_n = np.linspace(y0_n, y1_n, num_n).astype(int)
+
+                intersect_count_n = sum((x, y) in blue_set for x, y in zip(xs_n, ys_n))
+                if intersect_count_n >= 2:
+                    meets_condition = False
+                    break
+
+            if meets_condition:
+                return {
+                    "index": int(cur_index),
+                    "closest_point": tuple(map(int, closest_point)),
+                    "start": (x0, y0),
+                    "end": (x1, y1),
+                    "length_px": float(length),
+                    "intersect_count": intersect_count,
+                }
+
+    return None
+
 
 def find_best_width_perp_line(rot_img, p1_rot, p2_rot, start_index, target_width_px):
     # 从起始位置向上搜索，找到长度最接近目标值的垂线
@@ -345,24 +500,8 @@ def find_best_width_perp_line(rot_img, p1_rot, p2_rot, start_index, target_width
     return best_line
 
 
+
 # def find_upper_tangent_perp_line(rot_img, p1_rot, p2_rot, start_index):
-    # 从绿色实线继续向上搜索，返回离开 mask 前最后一条有效垂线，
-    # 用它近似表示与 mask 上边界相切的绿色虚线
-    last_valid_line = None
-
-    for index in range(start_index - 1, -1, -1):
-        line = get_perp_line_at_index1(rot_img, p1_rot, p2_rot, index)
-        if line is not None:
-            last_valid_line = line
-            continue
-        # if rot_img[index].sum() > 0 and rot_img[index - 1].sum() == 0:
-        #     return last_valid_line
-        if last_valid_line is not None:
-            return last_valid_line
-    return last_valid_line
-
-
-def find_upper_tangent_perp_line(rot_img, p1_rot, p2_rot, start_index):
 
     h = rot_img.shape[0]
 
@@ -378,6 +517,75 @@ def find_upper_tangent_perp_line(rot_img, p1_rot, p2_rot, start_index):
 
     return None
 
+
+def find_upper_tangent_perp_line(rot_img, p1_rot, p2_rot, start_index):
+    for index in range(start_index - 1, 0, -1):
+        line = get_perp_line_at_index1(rot_img, p1_rot, p2_rot, index)
+        if line is None:
+            continue
+        x1, y1 = line["start"]
+        x2, y2 = line["end"]
+        point_count = 0
+
+        if x1 == x2:
+            ys = range(min(y1, y2), max(y1, y2) + 1)
+            for y in ys:
+                if 0 <= y < rot_img.shape[0] and 0 <= x1 < rot_img.shape[1] and rot_img[y, x1] > 0:
+                    point_count += 1
+        else:
+            num_steps = int(max(abs(x2 - x1), abs(y2 - y1))) + 1
+            xs = np.linspace(x1, x2, num_steps)
+            ys = np.linspace(y1, y2, num_steps)
+            visited = set()
+            for x, y in zip(xs, ys):
+                xi = int(round(x))
+                yi = int(round(y))
+                if (xi, yi) in visited:
+                    continue
+                visited.add((xi, yi))
+                if 0 <= yi < rot_img.shape[0] and 0 <= xi < rot_img.shape[1] and rot_img[yi, xi] > 0:
+                    point_count += 1
+
+        if point_count <= 1:
+            return line
+
+    return None
+
+
+
+def find_upper_tangent_perp_line(rot_img, p1_rot, p2_rot, start_index):
+    for index in range(start_index - 1, 0, -1):
+        line = get_perp_line_at_index1(rot_img, p1_rot, p2_rot, index)
+        if line is None:
+            continue
+
+        x1, y1 = line["start"]
+        x2, y2 = line["end"]
+        point_count = 0
+
+        if x1 == x2:
+            ys = range(min(y1, y2), max(y1, y2) + 1)
+            for y in ys:
+                if 0 <= y < rot_img.shape[0] and 0 <= x1 < rot_img.shape[1] and rot_img[y, x1] > 0:
+                    point_count += 1
+        else:
+            num_steps = int(max(abs(x2 - x1), abs(y2 - y1))) + 1
+            xs = np.linspace(x1, x2, num_steps)
+            ys = np.linspace(y1, y2, num_steps)
+            visited = set()
+            for x, y in zip(xs, ys):
+                xi = int(round(x))
+                yi = int(round(y))
+                if (xi, yi) in visited:
+                    continue
+                visited.add((xi, yi))
+                if 0 <= yi < rot_img.shape[0] and 0 <= xi < rot_img.shape[1] and rot_img[yi, xi] > 0:
+                    point_count += 1
+
+        if point_count <= 5:
+            return line
+
+    return None
 
 
 def draw_line_by_style(img, line_info, color, dashed=False, thickness=2):
