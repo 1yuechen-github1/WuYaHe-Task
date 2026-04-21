@@ -1123,13 +1123,13 @@ def find_min_dist_poin(point,yagong_point):
 def get_star_end(lmax_midpoint, yagong_filt_xl, lkq_midpoint, threshold=2.0):
     # lsta_idx = np.where(np.all(yagong_filt_xl == lkq_midpoint, axis=1))[0]
     # lend_idx = np.where(np.all(yagong_filt_xl == lmax_midpoint, axis=1))[0]
-    print('lmax_midpoint:',lmax_midpoint)
-    print('yagong_filt_xl:',yagong_filt_xl)
-    print('lkq_midpoint:',lkq_midpoint)
+    # print('lmax_midpoint:',lmax_midpoint)
+    # print('yagong_filt_xl:',yagong_filt_xl)
+    # print('lkq_midpoint:',lkq_midpoint)
     dist = np.linalg.norm(yagong_filt_xl - lkq_midpoint, axis=1)
     dist1 = np.linalg.norm(yagong_filt_xl - lmax_midpoint, axis=1)
-    print('dist:',dist)
-    print('dist1:',dist1)
+    # print('dist:',dist)
+    # print('dist1:',dist1)
     lsta_idx = np.where(dist < 1e-2)[0]  # 1e-3 可以根据坐标尺度调节
 
     lend_idx = np.where(dist1 < 1e-2)[0]

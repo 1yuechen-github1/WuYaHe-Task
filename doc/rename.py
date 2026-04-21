@@ -19,9 +19,11 @@ import os
 
 def rename_files(path):
     for file in os.listdir(path):
-        prefix = file.split('_')[1]
-        os.rename(os.path.join(path, file), os.path.join(path,prefix))
-        print(file,prefix)
+        prefix = file[0:3]
+        # os.rename(os.path.join(path, file), os.path.join(path,f"WuYaHe_{prefix}.nii.gz"))
+        if file.endswith("_0000.nii.gz"):
+            continue
+        else:
+            os.rename(os.path.join(path, file), os.path.join(path,f"WuYaHe_{prefix}_0000.nii.gz"))
 
-
-rename_files(r'C:\Users\yuechen\Desktop\fsdownload\pred')
+rename_files(r'F:\wuyahe\data\imagesTr')

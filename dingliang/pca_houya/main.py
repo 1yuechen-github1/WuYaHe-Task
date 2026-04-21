@@ -21,8 +21,8 @@ if __name__ == "__main__":
     # 5. 计算蓝色实线与绿色实线之间的距离 a
     # 6. 计算绿色实线与绿色虚线之间的距离 b
 
-    inp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot1\houya"
-    outp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot1\houya-pca"
+    inp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\houya"
+    outp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\pca\pca-houya"
 
     os.makedirs(outp, exist_ok=True)
 
@@ -118,7 +118,7 @@ if __name__ == "__main__":
 
             with open(f"{outp}\\{prex}" + "\\len.txt", "a") as f:
                 f.write(
-                    f"{file2},a={a_len:.2f},b={b_len:.2f},green_width={green_solid_line['length_px'] * PIXEL_SPACING_MM:.2f}\n"
+                    f"{file2},{a_len:.2f},{b_len:.2f}\n"
                 )
 
             cv2.line(vis1, tuple(p1_rot), tuple(p2_rot), (0, 0, 255), 3)
