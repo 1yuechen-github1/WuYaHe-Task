@@ -1,3 +1,5 @@
+import sys
+sys.path.insert(0, r"C:\\yuechen\\code\\wuyahe\\1.code\\0212\\WuYaHe-Task\\dingliang\\pca-qianya")
 from networkx import center
 import cv2
 import numpy as np
@@ -22,14 +24,14 @@ def draw_horizontal_dashed_line(img, y, x0, x1, color, thickness=1, dash=8, gap=
 
 # 主程序
 if __name__ == "__main__":
-    inp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\qianya"
-    outp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\pca\pca-qianya"
+    inp = r"C:\yuechen\code\wuyahe\1.code\0212\output\base\screenshot\qianya"
+    outp = r"C:\yuechen\code\wuyahe\1.code\0212\output\pca\pca-qianya"
     os.makedirs(outp, exist_ok=True)
     os.makedirs(outp, exist_ok=True)
     total_files = 0
     success_files = 0
     # for file in os.listdir(inp):
-    for file in tqdm(os.listdir(inp), desc='对前牙截图定量', unit='file'):    
+    for file in tqdm(os.listdir(inp), desc='对后牙截图定量', unit='file'):    
         for file1 in os.listdir(os.path.join(inp,file)):
             ext = os.path.splitext(file)[1].lower()
             total_files += 1

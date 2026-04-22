@@ -449,7 +449,7 @@ def process_single_ct(ct_path, base_dir, output_base_dir,txt_path):
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(xhg_points)
     pcd.colors = o3d.utility.Vector3dVector(colors_all)
-    o3d.visualization.draw_geometries([pcd], width=800, height=600)
+    # o3d.visualization.draw_geometries([pcd], width=800, height=600)
 
     # 将 label(>0) 重建为网格，并把当前点云颜色映射到网格顶点
     vol = (fdata > 0).astype(np.uint8)
@@ -471,8 +471,8 @@ def process_single_ct(ct_path, base_dir, output_base_dir,txt_path):
 
 
 if __name__ == "__main__":
-    base_dir = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot1\linshi"
-    txt_path = r'C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot1\linshi\screenshot\pca'
+    base_dir = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放"
+    txt_path = r'C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\pca'
     output_base_dir = base_dir
     spacing = 0.3
     ct_dir = os.path.join(base_dir, "ct")

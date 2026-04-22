@@ -2,9 +2,18 @@ import numpy as np
 import nibabel as nib
 import open3d as o3d
 import os
+import sys
 from scipy.spatial import KDTree
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+
+# _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+# _GET_JIETU_UTILS_DIR = os.path.normpath(
+#     os.path.join(_THIS_DIR, "..", "WuYaHe-Task", "dingliang", "get_jietu")
+# )
+# if _GET_JIETU_UTILS_DIR not in sys.path:
+#     sys.path.insert(0, _GET_JIETU_UTILS_DIR)
+
 from utils import *
 from skimage.transform import rescale
 from scipy.ndimage import zoom
@@ -13,6 +22,9 @@ import numpy as  np
 plt.rcParams['font.sans-serif'] = ['SimHei']
 plt.rcParams['axes.unicode_minus'] = False
 from matplotlib.colors import LinearSegmentedColormap
+
+def has_mandibular_canal(mask):
+    return np.any((mask == 2) | (mask == 3))
 
 
 def process_single_ct(ct_path, base_dir, output_base_dir,txt_path):
@@ -112,6 +124,8 @@ def process_single_ct(ct_path, base_dir, output_base_dir,txt_path):
     midline_point = (left_kekong + right_kekong) / 2
     offset_z = int(abs(midline_point[2] - max_y[2]))
     dist = np.linalg.norm(xiayuanxiang_path_data - midline_point, axis=1)
+    
+    
     point = xiayuanxiang_path_data[np.argmin(dist)]
     point_z = point[2]
     dist_list = []
@@ -154,7 +168,9 @@ def process_single_ct(ct_path, base_dir, output_base_dir,txt_path):
         inde_lsta, inde_lend = get_star_end(lkq_midpoint, yagong_filt_xl, lmax_midpoint)
 
     maskl = np.ones(len(yagong_filt_xl), dtype=bool)
-    maskl = maskl & ~((yagong_filt_xl[:, 0] > yagong_filt_xl[inde_lsta, 0]) &(yagong_filt_xl[:, 0] < yagong_filt_xl[inde_lend, 0]))
+    kekong_maskl = (yagong_filt_xl[:, 0] > yagong_filt_xl[inde_lsta, 0]) & (yagong_filt_xl[:, 0] < yagong_filt_xl[inde_lend, 0])
+    maskl = maskl & ~kekong_maskl
+    kekong_points_l = yagong_filt_xl[kekong_maskl]
     yagong_filt_xl = yagong_filt_xl[maskl]
 
     if rmax_midpoint[0] > rkq_midpoint[0]:
@@ -162,7 +178,9 @@ def process_single_ct(ct_path, base_dir, output_base_dir,txt_path):
     else:
         inde_rsta, inde_rend = get_star_end(rkq_midpoint, yagong_filt_xr, rmax_midpoint)
     maskr = np.ones(len(yagong_filt_xr), dtype=bool)
-    maskr = maskr & ~((yagong_filt_xr[:, 0] > yagong_filt_xr[inde_rsta, 0]) &(yagong_filt_xr[:, 0] < yagong_filt_xr[inde_rend, 0]))
+    kekong_maskr = (yagong_filt_xr[:, 0] > yagong_filt_xr[inde_rsta, 0]) & (yagong_filt_xr[:, 0] < yagong_filt_xr[inde_rend, 0])
+    maskr = maskr & ~kekong_maskr
+    kekong_points_r = yagong_filt_xr[kekong_maskr]
     yagong_filt_xr = yagong_filt_xr[maskr]
 
     if lmax_midpoint[0] > lkq_midpoint[0]:
@@ -186,51 +204,74 @@ def process_single_ct(ct_path, base_dir, output_base_dir,txt_path):
     qianya_points = np.vstack([houya_points_l, qianya_points_r])
     houya_points = np.vstack([qianya_points_l, houya_points_r])
 
-
+    kekong_points_l_move_to_qianya = []
+    kekong_points_r_move_to_qianya = []
     qianya_data = []
     houya_data = []
+    kekong_data = []
 
-    # qianya_path = os.path.join(txt_path,'qianya','pca',filename,'len.txt')
-    houya_path = os.path.join(txt_path, 'pca','houya', filename, 'len.txt')
-    # with open(qianya_path, 'r')as f:
-    #     for line in f:
-    #         line = line.strip()
-    #         value = float(line.split(',')[-1]) * 0.3
-    #         qianya_data.append(value)
+    qianya_path = os.path.join(txt_path,'pca-qianya',filename,'len.txt')
+    houya_path = os.path.join(txt_path, 'pca-houya', filename, 'len.txt')
+    kekong_path = os.path.join(txt_path, 'pca-kekong', filename, 'len.txt')
+    with open(qianya_path, 'r')as f:
+        for line in f:
+            line = line.strip()
+            value = float(line.split(',')[-3]) 
+            qianya_data.append(value)
+
     with open(houya_path, 'r')as f:
         for line in f:
             line = line.strip()
             # value = float(line.split(',')[-1])
-            value = float(line.split(',')[-1]) 
+            value = float(line.split(',')[-2]) 
             houya_data.append(value )
-    # print('qianya_data:',qianya_data)
-    # print('houya_data:',houya_data)
+
+    with open(kekong_path, 'r')as f:
+        for line in f:
+            line = line.strip()
+            # value = float(line.split(',')[-1])
+            value = float(line.split(',')[-1]) 
+            kekong_data.append(value )
+
+
     counter = 0
     xhg_points = np.asarray(xhg_points)
     N = len(xhg_points)
     colors_all = np.ones((N, 3)) * 0.7  # 默认灰色
-    print('开始输出前牙可视化')
-    print('开始输出后牙可视化')
+
+
     prev_plane = None
     prev_color = None
-    n_lines = len(houya_data)
-    colors = []
-    hy_data = np.sort(houya_data)
-
-
-    hy_max = np.max(hy_data)
-    hy_min = np.min(hy_data)
-    # print('houya_data:',houya_data)
+    # Match qianya_points processing with get_jietu/main_debug.py
     qianya_points = filt_curve(qianya_points, 0.2)
+    houya_points = filt_curve(houya_points, 0.2)
+    kekong_points_l = filt_curve(kekong_points_l, 0.2)
+    kekong_points_r = filt_curve(kekong_points_r, 0.2)
+
+    # kekong_points = np.vstack([kekong_points_l, kekong_points_r])
+    # kekong_points = filt_curve(kekong_points, 0.2)
+    # kekong_pcd = o3d.geometry.PointCloud()
+    # kekong_pcd.points = o3d.utility.Vector3dVector(kekong_points)
+    # houya_pcd = o3d.geometry.PointCloud()
+    # houya_pcd.points = o3d.utility.Vector3dVector(houya_points)
+    # vis([kekong_pcd,houya_pcd], "kekong_points")
+
+    hy_max = np.max(houya_data)
+    hy_min = np.min(houya_data)
+
+    qy_max = np.max(qianya_data)
+    qy_min = np.min(qianya_data)
+
+    # # 后牙可视化    
     for index, point in enumerate(qianya_points):
         plane_coeffs, _ = compute_shortest_distance_to_curve_with_perpendicular_plane(
             xiayuanxiang_path_data, point
         )
         pm_len = houya_data[index]
-        print(f"点 {index} 的骨长: {pm_len}")
-        # len_inde = np.where(hy_data == pm_len)[0][0]
-        # curr_color = colors[len_inde]
-        curr_color = get_clo_list(pm_len,hy_min,hy_max)
+        # print(f"点 {index} 的骨长: {pm_len}")
+        # curr_color = map_houya_length_to_color(pm_len, hy_min, hy_max)
+        curr_color = get_clo_list_houya(pm_len,hy_min,hy_max)
+
         a, b, c, d = plane_coeffs
         n = np.array([a, b, c])
         dist = np.abs(xhg_points @ n + d) / np.linalg.norm(n)
@@ -250,8 +291,114 @@ def process_single_ct(ct_path, base_dir, output_base_dir,txt_path):
         prev_plane = plane_coeffs
         prev_color = curr_color
 
+    if len(kekong_points_l) > 0:
+        kekong_points_l = filt_curve(kekong_points_l, 0.2)
+        for index, point in enumerate(kekong_points_l):
+            plane_coeffs, closest_point = compute_shortest_distance_to_curve_with_perpendicular_plane(
+             xiayuanxiang_path_data, point
+            )
+            plane_coeffs, closest_point = trans_to_nifti(
+            plane_coeffs, closest_point, ct_img, affine)
+
+            mid_slice,mid_mk = extract_slice(
+            ct_data, fdata, plane_coeffs, closest_point,index, len(kekong_points_l))
+            # if np.all(mid_mk == 0):
+            #     kekong_points_l_move_to_qianya.append(point)
+            if not has_mandibular_canal(mid_mk):
+                kekong_points_l_move_to_qianya.append(point)
+                # kekong_points_l.remove(point)
+                kekong_points_l = kekong_points_l[~np.all(kekong_points_l == point, axis=1)]
+
+    if len(kekong_points_r) > 0:
+        kekong_points_r = filt_curve(kekong_points_r, 0.2)
+        for index, point in enumerate(kekong_points_r):
+            plane_coeffs, closest_point = compute_shortest_distance_to_curve_with_perpendicular_plane(
+             xiayuanxiang_path_data, point
+            )
+            plane_coeffs, closest_point = trans_to_nifti(
+            plane_coeffs, closest_point, ct_img, affine)
+
+            mid_slice,mid_mk = extract_slice(
+            ct_data, fdata, plane_coeffs, closest_point,index, len(kekong_points_r))
+            # if np.all(mid_mk == 0):
+            #     kekong_points_r_move_to_qianya.append(point)
+                
+            if not has_mandibular_canal(mid_mk):
+                kekong_points_r_move_to_qianya.append(point)
+                # kekong_points_r.remove(point)
+                kekong_points_r = kekong_points_r[~np.all(kekong_points_r == point, axis=1)]
+
+
+    kekong_points = np.vstack([kekong_points_l, kekong_points_r])
+
+    #颏孔可视化
+    print("kekong_points:", len(kekong_points), len(kekong_data ))
+    for index, point in enumerate(kekong_points):
+        plane_coeffs, closest_point = compute_shortest_distance_to_curve_with_perpendicular_plane(
+            xiayuanxiang_path_data, point
+        )
+        pm_len = kekong_data[index]
+        # print(f"点 {index} 的骨长: {pm_len}")
+        curr_color = get_clo_list_houya(pm_len,hy_min,hy_max)
+        a, b, c, d = plane_coeffs
+        n = np.array([a, b, c])
+        dist = np.abs(xhg_points @ n + d) / np.linalg.norm(n)
+        mask = dist < 0.3
+
+        colors_all[mask] = curr_color
+        if prev_plane is not None:
+            between_mask, blended = paint_between_planes(
+                xhg_points,
+                prev_plane,
+                plane_coeffs,
+                prev_color,
+                curr_color
+            )
+            if blended is not None:
+                colors_all[between_mask] = blended
+        prev_plane = plane_coeffs
+        prev_color = curr_color
+
+
+    if len(kekong_points_l_move_to_qianya) > 0:
+        houya_points = np.vstack([np.asarray(kekong_points_l_move_to_qianya), houya_points])
+    if len(kekong_points_r_move_to_qianya) > 0:
+        houya_points = np.vstack([houya_points, np.asarray(kekong_points_r_move_to_qianya)])
+
+    
+    #前牙可视化
+    for index, point in enumerate(houya_points):
+        plane_coeffs, _ = compute_shortest_distance_to_curve_with_perpendicular_plane(
+            xiayuanxiang_path_data, point
+        )
+        pm_len = qianya_data[index]
+        # print(f"点 {index} 的骨长: {pm_len}")
+        # curr_color = map_houya_length_to_color(pm_len, hy_min, hy_max)
+        curr_color = get_clo_list_qianya(pm_len,qy_min,qy_max)
+
+        a, b, c, d = plane_coeffs
+        n = np.array([a, b, c])
+        dist = np.abs(xhg_points @ n + d) / np.linalg.norm(n)
+        mask = dist < 0.3
+
+        colors_all[mask] = curr_color
+        if prev_plane is not None:
+            between_mask, blended = paint_between_planes(
+                xhg_points,
+                prev_plane,
+                plane_coeffs,
+                prev_color,
+                curr_color
+            )
+            if blended is not None:
+                colors_all[between_mask] = blended
+        prev_plane = plane_coeffs
+        prev_color = curr_color
+
+
     gray_color = np.array([0.7, 0.7, 0.7])
-    mask_gray = (xhg_points[:, 1] < left_z_centroid[1]) | (xhg_points[:, 1] < left_z_centroid[1])
+    gray_threshold = min(left_z_centroid[1], right_z_centroid[1])
+    mask_gray = xhg_points[:, 1] < gray_threshold
     # 强制设置为灰色
     colors_all[mask_gray] = gray_color
     pcd = o3d.geometry.PointCloud()
@@ -265,9 +412,10 @@ def process_single_ct(ct_path, base_dir, output_base_dir,txt_path):
     print(f" {filename} 处理完成")
 
 
+
 if __name__ == "__main__":
     base_dir = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放"
-    txt_path = r'C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot'
+    txt_path = r'C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot1\pca'
     output_base_dir = base_dir
     spacing = 0.3
     ct_dir = os.path.join(base_dir, "ct")

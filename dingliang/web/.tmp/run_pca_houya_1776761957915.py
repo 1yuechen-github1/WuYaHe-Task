@@ -20,10 +20,8 @@ if __name__ == "__main__":
     # 4. 绿色实线继续向上平移，找到与 mask 上边界相切的绿色虚线，垂直于长轴
     # 5. 计算蓝色实线与绿色实线之间的距离 a
     # 6. 计算绿色实线与绿色虚线之间的距离 b
-
-    inp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\houya_debug"
-    outp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\pca\pca-houya"
-
+    inp = r"C:\yuechen\code\wuyahe\1.code\0212\output\base\screenshot\houya"
+    outp = r"C:\yuechen\code\wuyahe\1.code\0212\output\pca\pca-houya"
     os.makedirs(outp, exist_ok=True)
 
     total_files = 0
@@ -122,11 +120,9 @@ if __name__ == "__main__":
                 )
 
             cv2.line(vis1, tuple(p1_rot), tuple(p2_rot), (0, 0, 255), 3)
-            h, w = vis1.shape[:2]
             for pt in blue_points:
-                x, y = int(round(pt[0])), int(round(pt[1]))
-                if 0 <= x < w and 0 <= y < h:
-                    vis1[y, x] = (255, 0, 0)
+                x, y = int(pt[0]), int(pt[1])
+                vis1[y, x] = (255, 0, 0)
 
 
             cv2.putText(

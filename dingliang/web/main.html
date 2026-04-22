@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CT Workflow</title>
+  <style>
+    :root { --line:#d9deea; --text:#1f2a44; --muted:#5d6b87; --accent:#2b6cf0; --card:#fff; }
+    body { margin:0; font-family:"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; background:linear-gradient(160deg,#eef2ff 0%,#f8fafc 60%,#e8f6f3 100%); color:var(--text); }
+    .wrap { max-width:1300px; margin:20px auto; padding:0 12px; }
+    .panel { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; box-shadow:0 8px 24px rgba(21,40,84,.08); margin-bottom:12px; }
+    .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .title { font-weight:700; margin-bottom:8px; }
+    .field { display:flex; flex-direction:column; gap:6px; margin-bottom:8px; }
+    input[type="file"], input[type="text"] { border:1px solid var(--line); border-radius:8px; padding:8px; font-size:14px; }
+    button { border:none; border-radius:8px; padding:10px 14px; background:var(--accent); color:#fff; cursor:pointer; font-weight:600; margin-top:6px; }
+    #viewer { width:100%; height:460px; border-radius:8px; overflow:hidden; border:1px solid var(--line); background:#111827; }
+    #log { white-space:pre-wrap; font-family:Consolas,monospace; font-size:12px; color:var(--muted); background:#f8fafc; border:1px dashed var(--line); border-radius:8px; padding:8px; min-height:180px; }
+    #previewWrap { margin-top:10px; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:#0f172a; min-height:260px; }
+    #previewImg { width:100%; height:320px; object-fit:contain; display:block; background:#020617; }
+    #previewMeta { padding:8px; color:#cbd5e1; font-size:12px; border-top:1px solid #1e293b; background:#111827; }
+    @media (max-width:1000px){ .row{ grid-template-columns:1fr; } }
+  </style>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/": "https://unpkg.com/three@0.160.0/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <div class="title">输入与执行</div>
+      <div class="field">
+        <label>CT 文件（.nii/.nii.gz）</label>
+        <input id="ctFile" type="file" accept=".nii,.gz,.nii.gz" />
+      </div>
+      <div class="field">
+        <label>Label 文件（.nii/.nii.gz）</label>
+        <input id="labelFile" type="file" accept=".nii,.gz,.nii.gz" />
+      </div>
+      <div class="field">
+        <label>输出目录（可空；已有定量结果会自动复用）</label>
+        <input id="outputDir" type="text" placeholder="例如 C:\data\run_output" />
+      </div>
+      <button id="runBtn">运行全流程</button>
+    </div>
+    <div class="row">
+      <div class="panel">
+        <div class="title">DIV1 - 上色网格（鼠标联动）</div>
+        <div id="viewer"></div>
+      </div>
+      <div class="panel">
+        <div class="title">DIV2 - 日志与定量结果截图</div>
+        <div id="log">等待执行...</div>
+        <div id="previewWrap">
+          <img id="previewImg" alt="preview" />
+          <div id="previewMeta">鼠标移动到左侧模型上，显示对应区域定量结果截图</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+    import { PLYLoader } from "three/examples/jsm/loaders/PLYLoader.js";
+
+    const ctInput = document.getElementById("ctFile");
+    const labelInput = document.getElementById("labelFile");
+    const outputDirInput = document.getElementById("outputDir");
+    const runBtn = document.getElementById("runBtn");
+    const logEl = document.getElementById("log");
+    const viewerEl = document.getElementById("viewer");
+    const previewImg = document.getElementById("previewImg");
+    const previewMeta = document.getElementById("previewMeta");
+
+    let renderer, scene, camera, controls, currentMesh = null;
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    let preview = { qianya: [], houya: [], kekong: [] };
+    let xBounds = null, yBounds = null;
+    let lastPreviewUrl = "";
+    let lastMoveTs = 0;
+
+    function safeSetPreview(region, idx) {
+      const arr = preview[region] || [];
+      if (!arr.length) return;
+      const i = Math.max(0, Math.min(idx, arr.length - 1));
+      const url = arr[i].url;
+      if (url === lastPreviewUrl) return;
+      lastPreviewUrl = url;
+      previewImg.src = url;
+      previewMeta.textContent = `区域: ${region} | 切片: ${arr[i].name}`;
+    }
+
+    // 以模型 x 绝对距离中线的程度判定：
+    // 中间=前牙，过渡=颏孔，两侧=后牙
+    function regionFromX(x) {
+      if (!xBounds) return "qianya";
+      const center = (xBounds.min + xBounds.max) * 0.5;
+      const half = Math.max(1e-6, (xBounds.max - xBounds.min) * 0.5);
+      const d = Math.abs((x - center) / half); // 0..1
+      if (d < 0.22) return "qianya";
+      if (d < 0.45) return "kekong";
+      return "houya";
+    }
+
+    function indexFromY(y, region) {
+      const arr = preview[region] || [];
+      if (!arr.length || !yBounds) return 0;
+      const t = (y - yBounds.min) / Math.max(1e-6, (yBounds.max - yBounds.min)); // bottom->top
+      const ratio = 1 - Math.max(0, Math.min(1, t)); // top slice index 0
+      return Math.floor(ratio * (arr.length - 1));
+    }
+
+    function onMeshHover(point) {
+      const region = regionFromX(point.x);
+      const idx = indexFromY(point.y, region);
+      safeSetPreview(region, idx);
+    }
+
+    function initViewer() {
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setSize(viewerEl.clientWidth, viewerEl.clientHeight);
+      viewerEl.innerHTML = "";
+      viewerEl.appendChild(renderer.domElement);
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x101828);
+      camera = new THREE.PerspectiveCamera(45, viewerEl.clientWidth / viewerEl.clientHeight, 0.1, 1e7);
+      camera.position.set(0, 0, 240);
+      controls = new OrbitControls(camera, renderer.domElement);
+      scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+      const dl = new THREE.DirectionalLight(0xffffff, 0.8);
+      dl.position.set(1, 1, 1);
+      scene.add(dl);
+
+      renderer.domElement.addEventListener("mousemove", (ev) => {
+        if (!currentMesh) return;
+        const now = performance.now();
+        if (now - lastMoveTs < 24) return; // ~40fps
+        lastMoveTs = now;
+        const rect = renderer.domElement.getBoundingClientRect();
+        mouse.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+        const hits = raycaster.intersectObject(currentMesh, false);
+        if (!hits.length) return;
+        onMeshHover(hits[0].point);
+      });
+
+      (function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+      })();
+    }
+
+    function loadPly(url) {
+      const loader = new PLYLoader();
+      loader.load(url, (geometry) => {
+        while (scene.children.length > 0) scene.remove(scene.children[0]);
+        scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+        const dl = new THREE.DirectionalLight(0xffffff, 0.8);
+        dl.position.set(1, 1, 1);
+        scene.add(dl);
+
+        const hasColor = !!geometry.getAttribute("color");
+        const material = new THREE.MeshBasicMaterial({
+          vertexColors: hasColor,
+          color: hasColor ? 0xffffff : 0xb0b0b0
+        });
+        const mesh = new THREE.Mesh(geometry, material);
+        scene.add(mesh);
+        currentMesh = mesh;
+
+        geometry.computeBoundingBox();
+        const box = geometry.boundingBox;
+        const center = new THREE.Vector3();
+        box.getCenter(center);
+        mesh.position.sub(center);
+        xBounds = { min: box.min.x - center.x, max: box.max.x - center.x };
+        yBounds = { min: box.min.y - center.y, max: box.max.y - center.y };
+
+        const size = new THREE.Vector3();
+        box.getSize(size);
+        const maxDim = Math.max(size.x, size.y, size.z);
+        camera.position.set(0, 0, maxDim * 1.8 + 1);
+        controls.target.set(0, 0, 0);
+        controls.update();
+      }, undefined, (err) => {
+        logEl.textContent += `\nPLY 加载失败: ${err}`;
+      });
+    }
+
+    async function runWorkflow() {
+      const ct = ctInput.files[0];
+      const label = labelInput.files[0];
+      if (!ct || !label) { alert("请先选择 CT 和 Label 文件"); return; }
+      const fd = new FormData();
+      fd.append("ct", ct);
+      fd.append("label", label);
+      fd.append("output_dir", outputDirInput.value || "");
+
+      logEl.textContent = "正在执行流程，请稍候...\n";
+      runBtn.disabled = true;
+      try {
+        const resp = await fetch("/api/run", { method: "POST", body: fd });
+        const data = await resp.json();
+        if (!data.ok) throw new Error(data.error || "unknown error");
+        preview = data.preview || { qianya: [], houya: [], kekong: [] };
+        if ((preview.qianya || []).length) safeSetPreview("qianya", Math.floor(preview.qianya.length / 2));
+        logEl.textContent += `运行完成\ncase: ${data.case_id}\n输出: ${data.run_root}\nply: ${data.ply_url}\n`;
+        logEl.textContent += `\n[PCA-qianya]\n${data.pca_logs?.qianya?.stdout || ""}\n${data.pca_logs?.qianya?.stderr || ""}`;
+        logEl.textContent += `\n[PCA-houya]\n${data.pca_logs?.houya?.stdout || ""}\n${data.pca_logs?.houya?.stderr || ""}`;
+        logEl.textContent += `\n[PCA-kekong]\n${data.pca_logs?.kekong?.stdout || ""}\n${data.pca_logs?.kekong?.stderr || ""}`;
+        loadPly(data.ply_url + `?t=${Date.now()}`);
+      } catch (e) {
+        logEl.textContent += `\n执行失败: ${e.message}`;
+      } finally {
+        runBtn.disabled = false;
+      }
+    }
+
+    runBtn.addEventListener("click", runWorkflow);
+    initViewer();
+    window.addEventListener("resize", () => {
+      if (!renderer || !camera) return;
+      renderer.setSize(viewerEl.clientWidth, viewerEl.clientHeight);
+      camera.aspect = viewerEl.clientWidth / viewerEl.clientHeight;
+      camera.updateProjectionMatrix();
+    });
+  </script>
+</body>
+</html>

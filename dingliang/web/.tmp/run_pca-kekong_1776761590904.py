@@ -14,9 +14,8 @@ dot_radius = 3
 
 
 if __name__ == "__main__":
-    inp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\kekong"
-    outp = r"C:\yuechen\code\wuyahe\1.code\2.data-缩放\screenshot\pca\pca-kekong"
-
+    inp = r"C:\yuechen\code\wuyahe\1.code\0212\output\base\screenshot\kekong"
+    outp = r"C:\yuechen\code\wuyahe\1.code\0212\output\pca\pca-kekong"
     os.makedirs(outp, exist_ok=True)
 
     total_files = 0
@@ -82,11 +81,9 @@ if __name__ == "__main__":
                 continue
             # print('target_width_px:',target_width_px)
             green_solid_line = find_first_width_perp_line(
-                rot_img, p1_rot, p2_rot, blue_solid_line["closest_point"][1], target_width_px,file
+                rot_img, p1_rot, p2_rot, blue_solid_line["closest_point"][1], target_width_px
             )
             if green_solid_line is None:
-                with open(f"{outp}\\{prex}" + "\\len.txt", "a") as f:
-                    f.write(f"{file2},{0:.2f}\n")
                 print(f"{file2}: failed to find target 6mm line")
                 continue
 

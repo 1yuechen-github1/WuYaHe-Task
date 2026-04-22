@@ -182,6 +182,7 @@ def extract_tooth_long_axis(
     p2 = (center + axis * L).astype(int)
     angle_axis = np.degrees(np.arctan2(axis[1], axis[0]))
     rotate_angle = angle_axis + 90.0
+    # rotate_angle = 0
     (h, w) = img.shape[:2]
     center_pt = (int(center[0]), int(center[1]))
     M = cv2.getRotationMatrix2D(center_pt, rotate_angle, 1.0)
